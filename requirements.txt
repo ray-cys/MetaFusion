@@ -1,0 +1,6 @@
+requests
+plexapi
+PyYAML
+pycountry
+Pillow
+tqdm

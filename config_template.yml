@@ -1,0 +1,68 @@
+# Plex Metadata Generator & Asset Downloader Configuration
+
+#Plex server configuration
+plex:
+  url: "http://localhost:32400"
+  token: "YOUR_PLEX_TOKEN"
+
+# TMDb API configuration
+tmdb:
+  api_key: "YOUR_TMDB_API_KEY"
+  language: "en"
+  region: "US"
+  fallback_languages:
+    - zh
+    - ja
+    - zh-yue
+
+# Plex libraries
+preferred_libraries:
+  - Movies
+  - TV Shows
+process_libraries: true
+cleanup_orphans: true
+
+# Logging
+log_level: "INFO"
+log_file: "metadata.log"
+
+# Threading
+threads:
+  max_workers: 10
+  timeout: 300
+
+# Metadata output
+metadata_path: "/config/metadata/"
+
+# Asset management
+assets:
+  assets_path: "/path/to/assets"
+  poster_filename: "poster.jpg"
+  season_filename: "Season{season_number:02}.jpg"
+  cleanup_orphans: true
+  thread_count: 10
+
+# Poster selection preferences
+poster_selection:
+  preferred_width: 2000
+  preferred_height: 3000
+  min_width: 1000
+  min_height: 1500
+  preferred_vote: 7.0
+  vote_relaxed: 5.0
+  vote_average_threshold: 5.0
+
+# Network and retry settings
+network:
+  backoff_factor: 1
+  max_retries: 3
+  timeout: 10
+  pool_connections: 100
+  pool_maxsize: 100
+
+# Cache
+cache_file: "tmdb_cache.json"
+
+# Dry run
+dry_run_default: false
+dry_run: false
