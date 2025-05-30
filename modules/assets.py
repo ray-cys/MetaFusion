@@ -5,6 +5,7 @@ from pathlib import Path
 from PIL import Image
 from helper.config import load_config
 from helper.plex import safe_title_year
+from helper.tmdb import tmdb_cache
 
 config = load_config()
 
@@ -21,20 +22,6 @@ def get_best_poster(
 ):
     """
     Select the best poster image from a list based on language and quality preferences.
-
-    Args:
-        images (list): List of image dictionaries from TMDb.
-        preferred_language (str): Preferred language code.
-        fallback_languages (list): List of fallback language codes.
-        preferred_vote (float): Minimum vote average for high-quality posters.
-        preferred_width (int): Minimum width for high-quality posters.
-        preferred_height (int): Minimum height for high-quality posters.
-        relaxed_vote (float): Minimum vote average for fallback posters.
-        min_width (int): Minimum width for fallback posters.
-        min_height (int): Minimum height for fallback posters.
-
-    Returns:
-        dict or None: The selected poster image dictionary, or None if no images available.
     """
     if not images:
         logging.debug("[Media Selection] No images available to select the best poster.")
@@ -93,14 +80,6 @@ def get_best_poster(
 def download_poster(image_path, save_path, item=None):
     """
     Download a poster image from TMDb and save it to the specified path.
-
-    Args:
-        image_path (str): The TMDb image path (e.g., "/abc123.jpg").
-        save_path (Path): The local path to save the image.
-        item: The Plex item (for logging).
-
-    Returns:
-        bool: True if download (or dry run) succeeded, False otherwise.
     """
     try:
         url = f"https://image.tmdb.org/t/p/original{image_path}"
@@ -137,17 +116,6 @@ def download_poster(image_path, save_path, item=None):
 def should_upgrade(asset_path, new_image_data, new_image_path=None, cache_key=None, item=None, season_number=None):
     """
     Determine if the new poster image should replace the existing one.
-
-    Args:
-        asset_path (Path): Path to the existing asset.
-        new_image_data (dict): Metadata for the new image.
-        new_image_path (Path, optional): Path to the new image file.
-        cache_key (str, optional): Cache key for the asset.
-        item: The Plex item (for logging).
-        season_number (int, optional): Season number (for logging).
-
-    Returns:
-        bool: True if the new image should be used, False otherwise.
     """
     new_width = new_image_data.get("width", 0)
     new_height = new_image_data.get("height", 0)
@@ -158,9 +126,16 @@ def should_upgrade(asset_path, new_image_data, new_image_path=None, cache_key=No
 
     vote_threshold = config["poster_selection"].get("vote_average_threshold", 5.0)
 
-    # Prefer new image if vote average is above threshold
-    if new_votes >= vote_threshold:
-        logging.info(f"[Media Recommendation] {label} upgraded based on vote average: {new_votes} (Threshold: {vote_threshold})")
+    # Compare to cached vote_average if available
+    cached_votes = 0
+    if cache_key and cache_key in tmdb_cache:
+        cached = tmdb_cache[cache_key]
+        if isinstance(cached, dict):
+            cached_votes = cached.get("vote_average", 0)
+
+    # Only upgrade if new vote_average is higher than cached, or above threshold
+    if new_votes > cached_votes or new_votes >= vote_threshold:
+        logging.info(f"[Media Recommendation] {label} upgraded based on vote average: {new_votes} (Cached: {cached_votes}, Threshold: {vote_threshold})")
         return not config.get("dry_run", False)
 
     # If no existing poster, always upgrade
@@ -194,13 +169,6 @@ def should_upgrade(asset_path, new_image_data, new_image_path=None, cache_key=No
 def generate_temp_path(library_name, extension="jpg"):
     """
     Generate a temporary file path for storing a poster image.
-
-    Args:
-        library_name (str): The name of the library.
-        extension (str): The file extension (default "jpg").
-
-    Returns:
-        Path: The generated temporary file path.
     """
     assets_path = Path(config["assets"]["assets_path"])
     temp_dir = assets_path / library_name
@@ -211,14 +179,6 @@ def generate_temp_path(library_name, extension="jpg"):
 def save_poster(image_content, save_path, item=None):
     """
     Save poster image content to disk, avoiding unnecessary overwrites.
-
-    Args:
-        image_content (bytes): The image data to save.
-        save_path (Path): The path to save the image.
-        item: The Plex item (for logging).
-
-    Returns:
-        None
     """
     try:
         new_checksum = hashlib.md5(image_content).hexdigest()

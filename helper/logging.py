@@ -6,16 +6,6 @@ from pathlib import Path
 def setup_logging(config):
     """
     Set up logging for the application.
-
-    Configures both file and console logging based on the provided configuration.
-    Rotates the previous log file if it exists, creates the log directory if needed,
-    and sets the log level and format.
-
-    Args:
-        config (dict): The configuration dictionary containing logging options.
-
-    Returns:
-        logging.Logger: The configured root logger.
     """
     # Determine the script directory and log directory
     script_dir = Path(os.path.dirname(os.path.abspath(__file__))).parent

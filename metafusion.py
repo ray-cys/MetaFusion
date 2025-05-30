@@ -12,12 +12,12 @@
 
 import sys
 import time
-from pathlib import Path
 from helper.config import load_config
 from helper.logging import setup_logging
 from helper.plex import get_plex_libraries
+from helper.stats import human_readable_size 
 from plexapi.server import PlexServer
-from modules.processing import process_library, process_library_assets
+from modules.processing import process_library
 from modules.cleanup import cleanup_orphans
 
 # Load configuration and set up logger
@@ -26,12 +26,7 @@ logger = setup_logging(config)
 
 if __name__ == "__main__":
     """
-    Main entry point for the Plex Metadata Generator script.
-
-    - Connects to Plex server.
-    - Processes selected libraries for metadata and assets.
-    - Optionally cleans up orphaned metadata and assets.
-    - Logs a summary report at the end.
+    Main entry point for MetaFusion script.
     """
     try:
         start_time = time.time()
@@ -60,31 +55,26 @@ if __name__ == "__main__":
         process_libraries = config.get("process_libraries", True)
         cleanup_orphans_flag = config.get("cleanup_orphans", True)
 
-        # Asset summary tracking
-        asset_summary = {}
+        # Metadata & Asset summary tracking
+        metadata_summaries = {}
+        library_filesize = {}
 
         # Process each library
         if process_libraries:
-            library_percentages = {}
             for lib in libraries:
                 library_name = lib.get("title")
                 if library_name not in selected_libraries:
                     logger.info(f"[Library Skip] Skipping library: {library_name}")
                     continue
                 logger.info(f"[Library Start] Processing library: {library_name}")
-                # Process metadata for the library
+                # Process metadata and assets for the library
                 process_library(
                     plex=plex,
                     library_name=library_name,
                     dry_run=config.get("dry_run_default", False),
                     library_item_counts=library_item_counts,
-                )
-                # Initialize per-library asset stats
-                asset_summary[library_name] = {"downloaded": 0, "updated": 0, "skipped": 0, "removed": 0}
-                # Process assets (e.g., posters) for the library
-                process_library_assets(
-                    plex=plex,
-                    summary=asset_summary[library_name]
+                    metadata_summaries=metadata_summaries,
+                    library_filesize=library_filesize,
                 )
 
         # Optionally clean up orphaned metadata and assets
@@ -95,7 +85,6 @@ if __name__ == "__main__":
                 asset_path=config["assets"]["assets_path"],
                 poster_filename=config["assets"].get("poster_filename", "poster.jpg"),
                 season_filename=config["assets"].get("season_filename", "Season{season_number:02}.jpg"),
-                summary=asset_summary
             )
 
         # Calculate elapsed time
@@ -104,7 +93,7 @@ if __name__ == "__main__":
 
         # --- Summary Report ---
         logger.info("=" * 60)
-        logger.info("SUMMARY REPORT")
+        logger.info("METAFUSION SUMMARY REPORT")
         logger.info("=" * 60)
         logger.info(f"[Summary] Processing completed in {minutes} minutes {seconds} seconds.")
         logger.info(f"[Summary] Libraries processed: {len(library_item_counts)}")
@@ -112,15 +101,22 @@ if __name__ == "__main__":
         logger.info(f"[Summary] Libraries skipped: {', '.join(skipped_libraries) if skipped_libraries else 'None'}")
         processed_count = sum(library_item_counts.values())
         logger.info(f"[Summary] Total items processed: {processed_count}")
-        logger.info("[Per-Library Metadata Item Stats]")
+        logger.info("[Per-Library Metadata Counts]")
         for lib_name, count in library_item_counts.items():
             logger.info(f"  - {lib_name}: {count} items processed")
-        logger.info("[Per-Library Assets Stats]")
-        for lib_name, stats in asset_summary.items():
-            logger.info(f"  - {lib_name}: Downloaded: {stats['downloaded']}")
-            logger.info(f"  - {lib_name}: Updated: {stats['updated']}")
-            logger.info(f"  - {lib_name}: Skipped: {stats['skipped']}")
-            logger.info(f"  - {lib_name}: Removed: {stats['removed']}")
+        logger.info("[Per-Library Metadata Stats]")
+        metadata_summaries = globals().get("metadata_summaries", {})
+        for lib_name, summary in metadata_summaries.items():
+            logger.info(
+                f"{lib_name}: {summary['complete']}/{summary['total_items']} complete, {summary['incomplete']} incomplete"
+            )
+        logger.info("[Per-Library Downloaded Asset Size]")
+        for lib_name, size in library_filesize.items():
+            logger.info(f"  - {lib_name}: {human_readable_size(size)}")
+
+        total_downloaded = sum(library_filesize.values())
+        logger.info(f"[Summary] Total assets downloaded: {human_readable_size(total_downloaded)}")
+        logger.info("[Cleanup Stats]")
         if cleanup_orphans_flag:
             logger.info(f"  - Titles Removed (Orphans): {orphans_removed}")
         logger.info("=" * 60)

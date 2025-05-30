@@ -2,12 +2,12 @@
 
 #Plex server configuration
 plex:
-  url: "http://localhost:32400"
-  token: "YOUR_PLEX_TOKEN"
+  url: "http://192.168.50.4:32400"
+  token: "yvjCmRhemxSTT3J4sK3a"
 
 # TMDb API configuration
 tmdb:
-  api_key: "YOUR_TMDB_API_KEY"
+  api_key: "f4d8afd8ed2c6aec5bfe776420a54659"
   language: "en"
   region: "US"
   fallback_languages:
@@ -28,7 +28,7 @@ log_file: "metadata.log"
 
 # Threading
 threads:
-  max_workers: 10
+  max_workers: 8
   timeout: 300
 
 # Metadata output
@@ -36,7 +36,7 @@ metadata_path: "/config/metadata/"
 
 # Asset management
 assets:
-  assets_path: "/path/to/assets"
+  assets_path: "/config/assets/"
   poster_filename: "poster.jpg"
   season_filename: "Season{season_number:02}.jpg"
   cleanup_orphans: true
