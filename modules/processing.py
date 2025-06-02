@@ -1,17 +1,12 @@
-import os
 import logging
-import yaml
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 from threading import RLock
 from helper.config import load_config
 from helper.tmdb import resolve_tmdb_id, update_tmdb_cache, cache_lock, save_cache, save_failed_cache, tmdb_cache, failed_cache
 from helper.stats import summarize_metadata_completeness
-from modules.media_metadata import build_movie_metadata, build_tv_metadata
-from modules.media_assets import process_poster_for_media, process_season_poster
 
 config = load_config()
-METADATA_DIR = Path(config["metadata_path"])
 
 # Locks for thread safety
 metadata_lock = RLock()
@@ -28,6 +23,8 @@ def process_item_metadata_and_assets(
     existing_assets=None,
     library_filesize=None,
 ):
+    from modules.media_metadata import build_movie_metadata, build_tv_metadata
+    from modules.media_assets import process_poster_for_media, process_season_poster
     """
     Process a single Plex item: build metadata and download/process poster assets.
     """
@@ -112,17 +109,19 @@ def process_item_metadata_and_assets(
     logging.debug(f"[Processing] Finished processing: {full_title} ({library_type})")
 
 def process_library(plex, library_name, dry_run=False, library_item_counts=None, metadata_summaries=None, library_filesize=None):
+    from ruamel.yaml import YAML
     """
     Process all items in a Plex library, build metadata, download assets, and save to YAML.
     """
-    output_path = METADATA_DIR / f"{library_name.lower().replace(' ', '_')}.yml"
+    output_path = Path(config["metadata_path"]) / f"{library_name.lower().replace(' ', '_')}.yml"
     existing_yaml_data = {}
 
     # Load existing metadata if present
     if output_path.exists():
         try:
             with open(output_path, "r", encoding="utf-8") as f:
-                existing_yaml_data = yaml.safe_load(f) or {}
+                yaml = YAML()
+                existing_yaml_data = yaml.load(f) or {}
         except yaml.YAMLError:
             logging.error(f"[YAML Error] Failed to parse existing metadata file: {output_path}")
 
@@ -147,7 +146,7 @@ def process_library(plex, library_name, dry_run=False, library_item_counts=None,
             futures = {
                 executor.submit(
                     process_item_metadata_and_assets, item, consolidated_metadata, dry_run,
-                    existing_yaml_data, library_item_counts, library_name, existing_assets, library_filesize
+                    existing_yaml_data, library_item_counts, library_name, existing_assets, library_filesize,
                 ): item for item in items
             }
 
@@ -167,14 +166,10 @@ def process_library(plex, library_name, dry_run=False, library_item_counts=None,
             try:
                 logging.debug(f"[Metadata] Saving metadata to {output_path}...")
                 with open(output_path, "w", encoding="utf-8") as f:
-                    yaml.dump(
-                        consolidated_metadata,
-                        f,
-                        allow_unicode=True,
-                        default_flow_style=False,
-                        sort_keys=False,
-                        Dumper=yaml.SafeDumper
-                    )
+                    yaml = YAML()
+                    yaml.default_flow_style = False
+                    yaml.allow_unicode = True
+                    yaml.dump(consolidated_metadata, f)
                 logging.info(f"[Metadata] Metadata successfully saved to {output_path}")
 
                 with cache_lock:
