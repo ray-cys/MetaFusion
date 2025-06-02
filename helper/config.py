@@ -14,6 +14,16 @@ CONFIG_FILE = Path(
 # Default configuration at module level
 DEFAULT_CONFIG = {
     "dry_run": False,
+    "log_level": "INFO",
+    "cleanup": {"run_by_default": True, "skip_by_default": False},
+    "cleanup_orphans": True,
+    "process_metadata": True,
+    "process_assets": True,
+    "process_season_posters": True,
+    "process_backgrounds": True,
+    "process_season_backgrounds": True,
+    "metadata_path": "metadata",
+    "assets_path": "assets",
     "plex": {
         "url": "",
         "token": ""
@@ -24,14 +34,20 @@ DEFAULT_CONFIG = {
         "region": "US",
         "fallback": ["zh", "ja"]
     },
-    "metadata_path": "metadata",
-    "assets_path": "assets",
-
     "poster_selection": {
         "preferred_width": 2000,
         "preferred_height": 3000,
         "min_width": 1000,
         "min_height": 1500,
+        "preferred_vote": 7.0,
+        "vote_relaxed": 5.0,
+        "vote_average_threshold": 5.0
+    },
+    "background_selection": {
+        "preferred_width": 3840,
+        "preferred_height": 2160,
+        "min_width": 1920,
+        "min_height": 1080,
         "preferred_vote": 7.0,
         "vote_relaxed": 5.0,
         "vote_average_threshold": 5.0
@@ -45,13 +61,6 @@ DEFAULT_CONFIG = {
         "pool_connections": 100,
         "pool_maxsize": 100
     },
-    "log_level": "INFO",
-    "cleanup": {"run_by_default": True, "skip_by_default": False},
-    "process_libraries": True,
-    "cleanup_orphans": True,
-    "process_metadata": True,
-    "process_assets": True,
-    "process_season_posters": True,
 }
 
 def warn_unknown_keys(user_cfg, default_cfg, parent_key=""):

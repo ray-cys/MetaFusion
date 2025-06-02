@@ -171,3 +171,160 @@ def process_season_poster(tmdb_id, season_number, item, library_name, existing_a
     # Track processed asset
     existing_assets.add(str(asset_path.resolve()))
     return downloaded_size
+
+def process_background_for_media(media_type, tmdb_id, item, library_name, existing_assets):
+    from modules.assets import get_best_background
+    """
+    Download and process the best background (fanart) for a movie or TV show item.
+    """
+    logging.debug(f"[Script State] Processing Movies & TV Shows background: TMDb ID {tmdb_id}")
+    # Fetch metadata and images from TMDb
+    response = safe_get_with_retries(
+        f"https://api.themoviedb.org/3/{media_type}/{tmdb_id}",
+        params={
+            "api_key": config["tmdb"]["api_key"],
+            "append_to_response": "images",
+        }
+    )
+
+    if not response:
+        logging.warning(f"[Assets Fetch] Failed to fetch background data for {safe_title_year(item)}. Skipping...")
+        return 0
+
+    response_data = response.json()
+    images = response_data.get("images", {}).get("backdrops", [])
+    if not images:
+        logging.info(f"[Assets Fetch] No backgrounds found for {safe_title_year(item)}. Skipping...")
+        return 0
+
+    # Use get_best_background for selection
+    best = get_best_background(images)
+    if not best:
+        logging.info(f"[Assets Fetch] No suitable background found for {safe_title_year(item)}. Skipping...")
+        return 0
+
+    parent_dir = get_plex_show_directory(item) if media_type == "tv" else get_plex_movie_directory(item)
+    asset_path = Path(config["assets_path"]) / library_name / parent_dir / "fanart.jpg"
+    temp_path = generate_temp_path(library_name)
+    title = getattr(item, "title", "Unknown")
+    year = getattr(item, "year", "Unknown")
+    media_type = media_type.lower() if "media_type" in locals() else "tv"
+    if media_type == "show":
+        media_type = "tv"
+    elif media_type != "movie" and media_type != "tv":
+        media_type = "movie"
+    cache_key = f"{media_type}:{title}:{year}"
+
+    downloaded_size = 0
+    try:
+        if config.get("dry_run", False):
+            logging.info(f"[Assets Dry Run] Would process background for {safe_title_year(item)}")
+            existing_assets.add(str(asset_path.resolve()))
+            return 0
+
+        # Download background and check if upgrade is needed
+        if download_poster(best["file_path"], temp_path, item) and temp_path.exists():
+            downloaded_size = temp_path.stat().st_size
+            if should_upgrade(asset_path, best, new_image_path=temp_path, cache_key=cache_key, item=item):
+                asset_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(temp_path, asset_path)
+                logging.info(f"[Assets Upgrade] Background upgraded for {safe_title_year(item)}. Filesize: {human_readable_size(downloaded_size)}")
+                # Update cache with new bg_average
+                with cache_lock:
+                    if cache_key in tmdb_cache and isinstance(tmdb_cache[cache_key], dict):
+                        update_tmdb_cache(cache_key, tmdb_id, title, year, media_type, bg_average=best.get("vote_average"))
+                    else:
+                        tmdb_cache[cache_key] = {
+                            "tmdb_id": tmdb_id,
+                            "bg_average": best.get("vote_average")
+                        }
+                    save_cache(tmdb_cache)
+            else:
+                temp_path.unlink(missing_ok=True)
+                logging.info(f"[Assets Upgrade] No background upgrade needed for {safe_title_year(item)}")
+        else:
+            logging.warning(f"[Assets Upgrade] Background download failed for {safe_title_year(item)}, skipping...")
+    finally:
+        # Clean up temp file if it still exists
+        if temp_path.exists():
+            temp_path.unlink(missing_ok=True)
+
+    # Track processed asset
+    existing_assets.add(str(asset_path.resolve()))
+    return downloaded_size
+
+def process_season_background(tmdb_id, season_number, item, library_name, existing_assets):
+    from modules.assets import get_best_background
+    """
+    Download and process the best background (fanart) for a specific TV season.
+    """
+    logging.debug(f"[Script State] Processing Season background: TMDb ID {tmdb_id}, Season {season_number}")
+    # Fetch season metadata and images from TMDb
+    response = safe_get_with_retries(
+        f"https://api.themoviedb.org/3/tv/{tmdb_id}/season/{season_number}",
+        params={
+            "api_key": config["tmdb"]["api_key"],
+            "append_to_response": "images",
+        }
+    )
+
+    if not response or response.status_code == 404:
+        logging.info(f"[Assets Fetch] No backgrounds found or season not found for {safe_title_year(item)} Season {season_number}. Skipping...")
+        return 0
+
+    response_data = response.json()
+    images = response_data.get("images", {}).get("backdrops", [])
+    if not images:
+        logging.info(f"[Assets Fetch] No season backgrounds available for {safe_title_year(item)} Season {season_number}.")
+        return 0
+
+    # Use get_best_background for selection
+    best = get_best_background(images)
+    if not best:
+        logging.info(f"[Assets Fetch] No suitable season background found for {safe_title_year(item)} Season {season_number}. Skipping...")
+        return 0
+
+    parent_dir = get_plex_show_directory(item)
+    asset_path = Path(config["assets_path"]) / library_name / parent_dir / f"Season{season_number:02}-fanart.jpg"
+    temp_path = generate_temp_path(library_name)
+    title = getattr(item, "title", "Unknown")
+    year = getattr(item, "year", "Unknown")
+    media_type = "tv"
+    cache_key = f"tv:{title}:{year}:season{season_number}"
+
+    downloaded_size = 0
+    try:
+        if config.get("dry_run", False):
+            logging.info(f"[Assets Dry Run] Would process season background for {safe_title_year(item)} Season {season_number}")
+            existing_assets.add(str(asset_path.resolve()))
+            return 0
+
+        # Download background and check if upgrade is needed
+        if download_poster(best["file_path"], temp_path, item) and temp_path.exists():
+            downloaded_size = temp_path.stat().st_size
+            if should_upgrade(asset_path, best, new_image_path=temp_path, cache_key=cache_key, item=item, season_number=season_number):
+                asset_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(temp_path, asset_path)
+                logging.info(f"[Assets Upgrade] Season background upgraded for {safe_title_year(item)} Season {season_number}. Filesize: {human_readable_size(downloaded_size)}")
+                with cache_lock:
+                    if cache_key in tmdb_cache and isinstance(tmdb_cache[cache_key], dict):
+                        update_tmdb_cache(cache_key, tmdb_id, title, year, media_type, bg_average=best.get("vote_average"))
+                    else:
+                        tmdb_cache[cache_key] = {
+                            "tmdb_id": tmdb_id,
+                            "bg_average": best.get("vote_average")
+                        }
+                    save_cache(tmdb_cache)
+            else:
+                temp_path.unlink(missing_ok=True)
+                logging.info(f"[Assets Upgrade] No season background upgrade needed for {safe_title_year(item)} Season {season_number}")
+        else:
+            logging.warning(f"[Assets Upgrade] Failed to download season background for {safe_title_year(item)} Season {season_number}. Skipping...")
+    finally:
+        # Clean up temp file if it still exists
+        if temp_path.exists():
+            temp_path.unlink(missing_ok=True)
+
+    # Track processed asset
+    existing_assets.add(str(asset_path.resolve()))
+    return downloaded_size

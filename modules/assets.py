@@ -76,6 +76,59 @@ def get_best_poster(
     logging.debug(f"[Assets Selection] Selected any available poster as final fallback: {best}")
     return best
 
+def get_best_background(
+    images,
+    preferred_vote=None,
+    preferred_width=None,
+    preferred_height=None,
+    relaxed_vote=None,
+    min_width=None,
+    min_height=None
+):
+    """
+    Select the best background image from a list based on quality preferences.
+    """
+    if not images:
+        logging.debug("[Assets Selection] No images available to select the best background.")
+        return None
+
+    bg_sel = config["background_selection"]
+    preferred_vote = preferred_vote if preferred_vote is not None else bg_sel["preferred_vote"]
+    preferred_width = preferred_width if preferred_width is not None else bg_sel["preferred_width"]
+    preferred_height = preferred_height if preferred_height is not None else bg_sel["preferred_height"]
+    relaxed_vote = relaxed_vote if relaxed_vote is not None else bg_sel["vote_relaxed"]
+    min_width = min_width if min_width is not None else bg_sel["min_width"]
+    min_height = min_height if min_height is not None else bg_sel["min_height"]
+
+    # High quality filter
+    filtered = [
+        img for img in images
+        if img.get("vote_average", 0) >= preferred_vote and
+           img.get("width", 0) >= preferred_width and
+           img.get("height", 0) >= preferred_height
+    ]
+    if filtered:
+        best = max(filtered, key=lambda x: (x["vote_average"], x["width"] * x["height"]))
+        logging.debug(f"[Assets Selection] Selected high-quality background: {best}")
+        return best
+
+    # Relaxed filter
+    filtered = [
+        img for img in images
+        if img.get("vote_average", 0) >= relaxed_vote and
+           img.get("width", 0) >= min_width and
+           img.get("height", 0) >= min_height
+    ]
+    if filtered:
+        best = max(filtered, key=lambda x: (x["vote_average"], x["width"] * x["height"]))
+        logging.debug(f"[Assets Selection] Selected fallback background: {best}")
+        return best
+
+    # Fallback: any background
+    best = max(images, key=lambda x: (x["vote_average"], x["width"] * x["height"]))
+    logging.debug(f"[Assets Selection] Selected any available background as final fallback: {best}")
+    return best
+
 def download_poster(image_path, save_path, item=None):
     """
     Download a poster image from TMDb and save it to the specified path.

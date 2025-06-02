@@ -24,7 +24,10 @@ def process_item_metadata_and_assets(
     library_filesize=None,
 ):
     from modules.media_metadata import build_movie_metadata, build_tv_metadata
-    from modules.media_assets import process_poster_for_media, process_season_poster
+    from modules.media_assets import (
+        process_poster_for_media, process_season_poster,
+        process_background_for_media, process_season_background
+    )
     """
     Process a single Plex item: build metadata and download/process poster assets.
     """
@@ -110,6 +113,26 @@ def process_item_metadata_and_assets(
     else:
         logging.info(f"[Config] Asset processing disabled for {full_title}.")
 
+    # Process background assets (configurable through config)
+    if config.get("process_backgrounds", True):
+        try:
+            with assets_lock:
+                if library_type == "movie":
+                    size = process_background_for_media("movie", tmdb_id, plex_item, library_name, existing_assets)
+                    total_downloaded += size
+                elif library_type in ["show", "tv"]:
+                    size = process_background_for_media("tv", tmdb_id, plex_item, library_name, existing_assets)
+                    total_downloaded += size
+                    # Process season background assets (configurable through config)
+                    if config.get("process_season_backgrounds", True):
+                        for season in getattr(plex_item, "seasons", lambda: [])():
+                            size = process_season_background(tmdb_id, season.index, plex_item, library_name, existing_assets)
+                            total_downloaded += size
+        except Exception as e:
+            logging.error(f"[Processing Error] Failed to process backgrounds for {full_title}: {e}")
+    else:
+        logging.info(f"[Config] Background processing disabled for {full_title}.")
+        
     if library_filesize is not None and library_name != "Unknown":
         with assets_lock:
             library_filesize[library_name] = library_filesize.get(library_name, 0) + total_downloaded

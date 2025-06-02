@@ -79,7 +79,6 @@ tmdb:
 preferred_libraries:
   - Movies
   - TV Shows
-process_libraries: true
 cleanup_orphans: true
 
 # Logging

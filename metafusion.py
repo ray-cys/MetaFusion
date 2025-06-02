@@ -51,8 +51,7 @@ if __name__ == "__main__":
 
         orphans_removed = 0
 
-        # Flags for processing and cleanup
-        process_libraries = config.get("process_libraries", True)
+        # Flags for processing cleanup
         cleanup_orphans_flag = config.get("cleanup_orphans", True)
 
         # Metadata & Asset summary tracking
@@ -60,21 +59,20 @@ if __name__ == "__main__":
         library_filesize = {}
 
         # Process each library
-        if process_libraries:
-            for lib in libraries:
-                library_name = lib.get("title")
-                if library_name not in selected_libraries:
-                    logger.info(f"[Library Skip] Skipping library: {library_name}")
-                    continue
-                # Process metadata and assets for the library
-                process_library(
-                    plex=plex,
-                    library_name=library_name,
-                    dry_run=config.get("dry_run", False),
-                    library_item_counts=library_item_counts,
-                    metadata_summaries=metadata_summaries,
-                    library_filesize=library_filesize,
-                )
+        for lib in libraries:
+            library_name = lib.get("title")
+            if library_name not in selected_libraries:
+                logger.info(f"[Library Skip] Skipping library: {library_name}")
+                continue
+            # Process metadata and assets for the library
+            process_library(
+                plex=plex,
+                library_name=library_name,
+                dry_run=config.get("dry_run", False),
+                library_item_counts=library_item_counts,
+                metadata_summaries=metadata_summaries,
+                library_filesize=library_filesize,
+            )
 
         # Optionally clean up orphaned metadata and assets
         if cleanup_orphans_flag:
