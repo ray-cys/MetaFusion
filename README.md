@@ -120,9 +120,6 @@ network:
   pool_connections: 100
   pool_maxsize: 100
 
-# Cache
-cache_file: "tmdb_cache.json"
-
 # Dry run
 dry_run_default: false
 dry_run: false

@@ -16,15 +16,15 @@ from helper.config import load_config
 from helper.logging import setup_logging
 from helper.plex import get_plex_libraries
 from helper.stats import human_readable_size 
-from plexapi.server import PlexServer
-from modules.processing import process_library
-from modules.cleanup import cleanup_orphans
 
 # Load configuration and set up logger
 config = load_config()
 logger = setup_logging(config)
 
 if __name__ == "__main__":
+    from plexapi.server import PlexServer
+    from modules.processing import process_library
+    from modules.cleanup import cleanup_orphans
     """
     Main entry point for MetaFusion script.
     """
@@ -66,7 +66,6 @@ if __name__ == "__main__":
                 if library_name not in selected_libraries:
                     logger.info(f"[Library Skip] Skipping library: {library_name}")
                     continue
-                logger.info(f"[Library Start] Processing library: {library_name}")
                 # Process metadata and assets for the library
                 process_library(
                     plex=plex,
@@ -108,7 +107,7 @@ if __name__ == "__main__":
         metadata_summaries = globals().get("metadata_summaries", {})
         for lib_name, summary in metadata_summaries.items():
             logger.info(
-                f"{lib_name}: {summary['complete']}/{summary['total_items']} complete, {summary['incomplete']} incomplete"
+                f"  - {lib_name}: {summary['complete']}/{summary['total_items']} complete, {summary['incomplete']} incomplete"
             )
         logger.info("[Per-Library Downloaded Asset Size]")
         for lib_name, size in library_filesize.items():
