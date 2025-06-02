@@ -1,4 +1,3 @@
-import os
 import logging
 import sys
 from pathlib import Path
@@ -8,11 +7,10 @@ def setup_logging(config):
     Set up logging for the application.
     """
     # Determine the script directory and log directory
-    script_dir = Path(os.path.dirname(os.path.abspath(__file__))).parent
-    log_dir = script_dir / config.get("log_dir", "logs")
-    log_dir.mkdir(exist_ok=True)
-    log_file = log_dir / config.get("log_file", "metadata.log")
-    prev_log = log_dir / "previous-metadata.log"
+    log_path = Path(config.get("log_path", "logs"))
+    log_path.mkdir(exist_ok=True)
+    log_file = log_path / config.get("log_file", "metafusion.log")
+    prev_log = log_path / "previous-metafusion.log"
 
     # Rotate previous log file if it exists
     if log_file.exists():
