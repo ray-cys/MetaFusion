@@ -30,8 +30,8 @@ def process_poster_for_media(media_type, tmdb_id, item, library_name, existing_a
     )
 
     if not response:
-        logging.warning(f"[Media Fetch] Failed to fetch poster data for {safe_title_year(item)}. Skipping...")
-        return
+        logging.warning(f"[Assets Fetch] Failed to fetch poster data for {safe_title_year(item)}. Skipping...")
+        return 0
 
     response_data = response.json()
     images = response_data.get("images", {}).get("posters", [])
@@ -39,8 +39,8 @@ def process_poster_for_media(media_type, tmdb_id, item, library_name, existing_a
     best = get_best_poster(images, preferred_language=preferred_language, fallback_languages=fallback_languages)
 
     if not best:
-        logging.info(f"[Media Fetch] No suitable poster found for {safe_title_year(item)}. Skipping...")
-        return
+        logging.info(f"[Assets Fetch] No suitable poster found for {safe_title_year(item)}. Skipping...")
+        return 0
 
     # Determine asset path based on media type
     parent_dir = get_plex_show_directory(item) if media_type == "tv" else get_plex_movie_directory(item)
@@ -59,7 +59,7 @@ def process_poster_for_media(media_type, tmdb_id, item, library_name, existing_a
     downloaded_size = 0
     try:
         if config.get("dry_run", False):
-            logging.info(f"[Dry Run] Would process poster for {safe_title_year(item)}")
+            logging.info(f"[Assets Dry Run] Would process poster for {safe_title_year(item)}")
             existing_assets.add(str(asset_path.resolve()))
             return 0
 
@@ -69,7 +69,7 @@ def process_poster_for_media(media_type, tmdb_id, item, library_name, existing_a
             if should_upgrade(asset_path, best, new_image_path=temp_path, cache_key=cache_key, item=item):
                 asset_path.parent.mkdir(parents=True, exist_ok=True)
                 shutil.move(temp_path, asset_path)
-                logging.info(f"[Media Upgrade] Poster upgraded for {safe_title_year(item)}. Filesize: {human_readable_size(downloaded_size)}")
+                logging.info(f"[Assets Upgrade] Poster upgraded for {safe_title_year(item)}. Filesize: {human_readable_size(downloaded_size)}")
                 # Update cache with new vote_average
                 with cache_lock:
                     if cache_key in tmdb_cache and isinstance(tmdb_cache[cache_key], dict):
@@ -82,9 +82,9 @@ def process_poster_for_media(media_type, tmdb_id, item, library_name, existing_a
                     save_cache(tmdb_cache)
             else:
                 temp_path.unlink(missing_ok=True)
-                logging.info(f"[Media Upgrade] No upgrade needed for {safe_title_year(item)}")
+                logging.info(f"[Assets Upgrade] No upgrade needed for {safe_title_year(item)}")
         else:
-            logging.warning(f"[Media Upgrade] Poster download failed for {safe_title_year(item)}, skipping...")
+            logging.warning(f"[Assets Upgrade] Poster download failed for {safe_title_year(item)}, skipping...")
     finally:
         # Clean up temp file if it still exists
         if temp_path.exists():
@@ -112,20 +112,20 @@ def process_season_poster(tmdb_id, season_number, item, library_name, existing_a
     )
 
     if not response or response.status_code == 404:
-        logging.info(f"[Media Fetch] No posters found or season not found for {safe_title_year(item)} Season {season_number}. Skipping...")
-        return
+        logging.info(f"[Assets Fetch] No posters found or season not found for {safe_title_year(item)} Season {season_number}. Skipping...")
+        return 0
 
     response_data = response.json()
     images = response_data.get("images", {}).get("posters", [])
     if not images:
-        logging.info(f"[Media Fetch] No season posters available for {safe_title_year(item)} Season {season_number}.")
-        return
+        logging.info(f"[Assets Fetch] No season posters available for {safe_title_year(item)} Season {season_number}.")
+        return 0
 
     fallback_languages = config["tmdb"].get("fallback_languages", [])
     best = get_best_poster(images, preferred_language=preferred_language, fallback_languages=fallback_languages)
     if not best:
-        logging.info(f"[Media Fetch] No suitable season poster found for {safe_title_year(item)} Season {season_number}. Skipping...")
-        return
+        logging.info(f"[Assets Fetch] No suitable season poster found for {safe_title_year(item)} Season {season_number}. Skipping...")
+        return 0
 
     parent_dir = get_plex_show_directory(item)
     asset_path = Path(config["assets"]["assets_path"]) / library_name / parent_dir / config["assets"].get("season_filename", "Season{season_number:02}.jpg").format(season_number=season_number)
@@ -138,9 +138,9 @@ def process_season_poster(tmdb_id, season_number, item, library_name, existing_a
     downloaded_size = 0
     try:
         if config.get("dry_run", False):
-            logging.info(f"[Dry Run] Would process season poster for {safe_title_year(item)} Season {season_number}")
+            logging.info(f"[Assets Dry Run] Would process season poster for {safe_title_year(item)} Season {season_number}")
             existing_assets.add(str(asset_path.resolve()))
-            return
+            return 0
 
         # Download poster and check if upgrade is needed
         if download_poster(best["file_path"], temp_path, item) and temp_path.exists():
@@ -148,7 +148,7 @@ def process_season_poster(tmdb_id, season_number, item, library_name, existing_a
             if should_upgrade(asset_path, best, new_image_path=temp_path, cache_key=cache_key, item=item, season_number=season_number):
                 asset_path.parent.mkdir(parents=True, exist_ok=True)
                 shutil.move(temp_path, asset_path)
-                logging.info(f"[Media Upgrade] Season poster upgraded for {safe_title_year(item)} Season {season_number}. Filesize: {human_readable_size(downloaded_size)}")
+                logging.info(f"[Assets Upgrade] Season poster upgraded for {safe_title_year(item)} Season {season_number}. Filesize: {human_readable_size(downloaded_size)}")
                 with cache_lock:
                     if cache_key in tmdb_cache and isinstance(tmdb_cache[cache_key], dict):
                         update_tmdb_cache(cache_key, tmdb_id, title, year, media_type, vote_average=best.get("vote_average"))
@@ -160,9 +160,9 @@ def process_season_poster(tmdb_id, season_number, item, library_name, existing_a
                     save_cache(tmdb_cache)
             else:
                 temp_path.unlink(missing_ok=True)
-                logging.info(f"[Media Upgrade] No season poster upgrade needed for {safe_title_year(item)} Season {season_number}")
+                logging.info(f"[Assets Upgrade] No season poster upgrade needed for {safe_title_year(item)} Season {season_number}")
         else:
-            logging.warning(f"[Media Upgrade] Failed to download season poster for {safe_title_year(item)} Season {season_number}. Skipping...")
+            logging.warning(f"[Assets Upgrade] Failed to download season poster for {safe_title_year(item)} Season {season_number}. Skipping...")
     finally:
         # Clean up temp file if it still exists
         if temp_path.exists():
