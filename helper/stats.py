@@ -1,5 +1,4 @@
 import logging
-import yaml
 
 def log_metadata_completeness(level, name, metadata_dict, expected_fields, extra=""):
     """
@@ -13,12 +12,9 @@ def log_metadata_completeness(level, name, metadata_dict, expected_fields, extra
     percent_filled = round((filled / len(expected_fields)) * 100)
     # Log the completeness percentage
     logging.info(
-        f"[{level}] {name}{extra}: {percent_filled:.0f}% TMDb metadata extracted ({filled}/{len(expected_fields)})"
+        f"[{level}] TMDb extracted ({filled}/{len(expected_fields)}) for {name}{extra}: {percent_filled:.0f}% "
     )
     return percent_filled
-
-import logging
-import yaml
 
 def check_metadata_completeness(
     metadata_dict,
@@ -73,6 +69,7 @@ def summarize_metadata_completeness(
     episode_ignored=None,
     required_fields=None,  # Optional: explicitly set required fields
 ):
+    from ruamel.yaml import YAML
     """
     Summarizes metadata completeness count and lists of incomplete/missing items for a library.
     """
@@ -84,7 +81,8 @@ def summarize_metadata_completeness(
         episode_ignored = set()
 
     with open(output_path, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f) or {}
+        yaml = YAML()
+        data = yaml.load(f) or {}
     metadata = data.get("metadata", {})
 
     # Dynamically determine required fields unless explicitly set
