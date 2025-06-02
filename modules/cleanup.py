@@ -6,14 +6,7 @@ from helper.plex import get_plex_movie_directory, get_plex_show_directory
 
 config = load_config()
 
-def cleanup_orphans(
-    plex,
-    libraries=None,
-    asset_path=None,
-    poster_filename=None,
-    season_filename=None,
-    existing_assets=None
-):
+def cleanup_orphans(plex, libraries=None, asset_path=None, existing_assets=None,):
     from ruamel.yaml import YAML
     """
     Cleans up orphaned metadata entries and asset files.
@@ -88,7 +81,7 @@ def cleanup_orphans(
             logging.error(f"[Cleanup] Failed processing {metadata_file}: {e}")
 
     # --- Asset Orphan Cleanup ---
-    if asset_path and poster_filename and season_filename:
+    if asset_path:
         # Build set of valid asset directories from Plex
         valid_asset_dirs = set()
         for section in plex_sections:
@@ -132,8 +125,8 @@ def cleanup_orphans(
                         logging.warning(f"[Library Cleanup] Failed to remove orphaned {description} {path}: {e}")
 
         # Remove orphaned poster and season poster files
-        remove_orphaned_files(poster_filename, "poster")
-        remove_orphaned_files(season_filename.replace("{season_number:02}", "*"), "season poster")
+        remove_orphaned_files("poster.jpg", "poster")
+        remove_orphaned_files("Season*.jpg", "season poster")
         logging.info(f"[Library Cleanup] Asset orphan cleanup complete.")
 
     logging.info(f"[Cleanup] Total orphans removed: {orphans_removed}")

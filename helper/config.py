@@ -22,16 +22,11 @@ DEFAULT_CONFIG = {
         "api_key": "",
         "language": "en",
         "region": "US",
-        "fallback_languages": ["zh", "ja", "zh-yue"]
+        "fallback": ["zh", "ja"]
     },
     "metadata_path": "metadata",
-    "assets": {
-        "assets_path": "assets",
-        "poster_filename": "poster.jpg",
-        "season_filename": "Season{season_number:02}.jpg",
-        "cleanup_orphans": True,
-        "thread_count": 10
-    },
+    "assets_path": "assets",
+
     "poster_selection": {
         "preferred_width": 2000,
         "preferred_height": 3000,
@@ -51,12 +46,12 @@ DEFAULT_CONFIG = {
         "pool_maxsize": 100
     },
     "log_level": "INFO",
-    "log_file": "metadata.log",
-    "log_path": "logs",
     "cleanup": {"run_by_default": True, "skip_by_default": False},
-    "dry_run_default": False,
     "process_libraries": True,
-    "cleanup_orphans": True 
+    "cleanup_orphans": True,
+    "process_metadata": True,
+    "process_assets": True,
+    "process_season_posters": True,
 }
 
 def warn_unknown_keys(user_cfg, default_cfg, parent_key=""):
@@ -87,7 +82,7 @@ def deep_merge_dicts(default, user):
 def apply_env_overrides(config, prefix=""):
     """
     Recursively override config values with environment variables.
-    For nested keys, use underscores, e.g., PLEX_URL, ASSETS_ASSETS_PATH.
+    For nested keys, use underscores, e.g., PLEX_URL, ASSETS_PATH.
     """
     for key, value in config.items():
         env_key = (prefix + "_" + key).upper() if prefix else key.upper()

@@ -35,8 +35,8 @@ def process_poster_for_media(media_type, tmdb_id, item, library_name, existing_a
 
     response_data = response.json()
     images = response_data.get("images", {}).get("posters", [])
-    fallback_languages = config["tmdb"].get("fallback_languages", [])
-    best = get_best_poster(images, preferred_language=preferred_language, fallback_languages=fallback_languages)
+    fallback = config["tmdb"].get("fallback", [])
+    best = get_best_poster(images, preferred_language=preferred_language, fallback=fallback)
 
     if not best:
         logging.info(f"[Assets Fetch] No suitable poster found for {safe_title_year(item)}. Skipping...")
@@ -44,7 +44,7 @@ def process_poster_for_media(media_type, tmdb_id, item, library_name, existing_a
 
     # Determine asset path based on media type
     parent_dir = get_plex_show_directory(item) if media_type == "tv" else get_plex_movie_directory(item)
-    asset_path = Path(config["assets"]["assets_path"]) / library_name / parent_dir / config["assets"].get("poster_filename", "poster.jpg")
+    asset_path = Path(config["assets_path"]) / library_name / parent_dir / "poster.jpg"
     temp_path = generate_temp_path(library_name)
     # Standardize media_type
     title = getattr(item, "title", "Unknown")
@@ -121,14 +121,14 @@ def process_season_poster(tmdb_id, season_number, item, library_name, existing_a
         logging.info(f"[Assets Fetch] No season posters available for {safe_title_year(item)} Season {season_number}.")
         return 0
 
-    fallback_languages = config["tmdb"].get("fallback_languages", [])
-    best = get_best_poster(images, preferred_language=preferred_language, fallback_languages=fallback_languages)
+    fallback = config["tmdb"].get("fallback", [])
+    best = get_best_poster(images, preferred_language=preferred_language, fallback=fallback)
     if not best:
         logging.info(f"[Assets Fetch] No suitable season poster found for {safe_title_year(item)} Season {season_number}. Skipping...")
         return 0
 
     parent_dir = get_plex_show_directory(item)
-    asset_path = Path(config["assets"]["assets_path"]) / library_name / parent_dir / config["assets"].get("season_filename", "Season{season_number:02}.jpg").format(season_number=season_number)
+    asset_path = Path(config["assets_path"]) / library_name / parent_dir / f"Season{season_number:02}.jpg"
     temp_path = generate_temp_path(library_name)
     title = getattr(item, "title", "Unknown")
     year = getattr(item, "year", "Unknown")

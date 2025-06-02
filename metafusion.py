@@ -70,7 +70,7 @@ if __name__ == "__main__":
                 process_library(
                     plex=plex,
                     library_name=library_name,
-                    dry_run=config.get("dry_run_default", False),
+                    dry_run=config.get("dry_run", False),
                     library_item_counts=library_item_counts,
                     metadata_summaries=metadata_summaries,
                     library_filesize=library_filesize,
@@ -81,9 +81,7 @@ if __name__ == "__main__":
             orphans_removed = cleanup_orphans(
                 plex,
                 libraries=[lib.get("title") for lib in libraries if lib.get("title") in selected_libraries],
-                asset_path=config["assets"]["assets_path"],
-                poster_filename=config["assets"].get("poster_filename", "poster.jpg"),
-                season_filename=config["assets"].get("season_filename", "Season{season_number:02}.jpg"),
+                asset_path=config["assets_path"],
             )
 
         # Calculate elapsed time
@@ -120,7 +118,7 @@ if __name__ == "__main__":
             logger.info(f"  - Titles Removed (Orphans): {orphans_removed}")
         logger.info("=" * 60)
 
-        if config.get("dry_run_default", False):
+        if config.get("dry_run", False):
             logger.info("[Dry Run] Completed. No files were written.")
 
     except Exception as e:

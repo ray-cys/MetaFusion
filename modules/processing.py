@@ -67,45 +67,53 @@ def process_item_metadata_and_assets(
     cache_key = f"{library_type}:{title}:{year}"
     update_tmdb_cache(cache_key, tmdb_id, title, year, library_type)
 
-    try:
-        # Build metadata based on library type
-        with metadata_lock:
-            if library_type == "movie":
-                build_movie_metadata(plex_item, consolidated_metadata, dry_run, existing_yaml_data)
-            elif library_type == "tv":
-                build_tv_metadata(plex_item, consolidated_metadata, dry_run, existing_yaml_data)
-            else:
-                logging.warning(f"[Metadata] Unsupported library type '{library_type}' for {full_title}. Skipping...")
-                return
-    except Exception as e:
-        logging.error(f"[Processing Error] Failed to process metadata for {full_title}: {e}")
-        return
+    # # Build metadata based on library type (configurable through config)
+    if config.get("process_metadata", True):
+        try:
+            with metadata_lock:
+                if library_type == "movie":
+                    build_movie_metadata(plex_item, consolidated_metadata, dry_run, existing_yaml_data)
+                elif library_type == "tv":
+                    build_tv_metadata(plex_item, consolidated_metadata, dry_run, existing_yaml_data)
+                else:
+                    logging.warning(f"[Metadata] Unsupported library type '{library_type}' for {full_title}. Skipping...")
+                    return
+        except Exception as e:
+            logging.error(f"[Processing Error] Failed to process metadata for {full_title}: {e}")
+            return
+    else:
+        logging.info(f"[Config] Metadata processing disabled for {full_title}.")
 
     # Update item count for the library
     if library_item_counts is not None and library_name != "Unknown":
         with cache_lock:
             library_item_counts[library_name] = library_item_counts.get(library_name, 0) + 1
 
-    # Process poster assets
+    # Process poster assets and season posters (configurable through config)
     total_downloaded = 0
-    try:
-        with assets_lock:
-            if library_type == "movie":
-                size = process_poster_for_media("movie", tmdb_id, plex_item, library_name, existing_assets)
-                total_downloaded += size
-            elif library_type in ["show", "tv"]:
-                size = process_poster_for_media("tv", tmdb_id, plex_item, library_name, existing_assets)
-                total_downloaded += size
-                # Process season posters
-                for season in getattr(plex_item, "seasons", lambda: [])():
-                    size = process_season_poster(tmdb_id, season.index, plex_item, library_name, existing_assets)
+    if config.get("process_assets", True):
+        try:
+            with assets_lock:
+                if library_type == "movie":
+                    size = process_poster_for_media("movie", tmdb_id, plex_item, library_name, existing_assets)
                     total_downloaded += size
-    except Exception as e:
-        logging.error(f"[Processing Error] Failed to process assets for {full_title}: {e}")
+                elif library_type in ["show", "tv"]:
+                    size = process_poster_for_media("tv", tmdb_id, plex_item, library_name, existing_assets)
+                    total_downloaded += size
+                    # --- SEASON POSTER SWITCH ---
+                    if config.get("process_season_posters", True):
+                        for season in getattr(plex_item, "seasons", lambda: [])():
+                            size = process_season_poster(tmdb_id, season.index, plex_item, library_name, existing_assets)
+                            total_downloaded += size
+        except Exception as e:
+            logging.error(f"[Processing Error] Failed to process assets for {full_title}: {e}")
+    else:
+        logging.info(f"[Config] Asset processing disabled for {full_title}.")
+
     if library_filesize is not None and library_name != "Unknown":
         with assets_lock:
             library_filesize[library_name] = library_filesize.get(library_name, 0) + total_downloaded
-    
+            
     logging.debug(f"[Processing] Finished processing: {full_title} ({library_type})")
 
 def process_library(plex, library_name, dry_run=False, library_item_counts=None, metadata_summaries=None, library_filesize=None):

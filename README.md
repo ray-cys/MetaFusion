@@ -70,7 +70,7 @@ tmdb:
   api_key: "YOUR_TMDB_API_KEY"
   language: "en"
   region: "US"
-  fallback_languages:
+  fallback:
     - zh
     - ja
     - fr
@@ -84,7 +84,6 @@ cleanup_orphans: true
 
 # Logging
 log_level: "INFO"
-log_file: "metadata.log"
 
 # Threading
 threads:
@@ -95,12 +94,7 @@ threads:
 metadata_path: "/config/metadata/"
 
 # Asset management
-assets:
-  assets_path: "/path/to/assets"
-  poster_filename: "poster.jpg"
-  season_filename: "Season{season_number:02}.jpg"
-  cleanup_orphans: true
-  thread_count: 10
+assets_path: "/path/to/assets"
 
 # Poster selection preferences
 poster_selection:
@@ -121,7 +115,6 @@ network:
   pool_maxsize: 100
 
 # Dry run
-dry_run_default: false
 dry_run: false
 ```
 

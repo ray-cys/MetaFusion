@@ -10,10 +10,10 @@ tmdb:
   api_key: "YOUR_TMDB_API_KEY"
   language: "en"
   region: "US"
-  fallback_languages:
+  fallback:
     - zh
     - ja
-    - zh-yue
+    - fr
 
 # Plex libraries to process
 preferred_libraries:
@@ -22,26 +22,24 @@ preferred_libraries:
 process_libraries: true
 cleanup_orphans: true
 
+# Metadata & Asset processing
+process_metadata: true
+process_assets: true
+process_season_posters: true
+
 # Logging
 log_level: "INFO"
-log_file: "metafusion.log"
-log_path: "/config/logs/"
 
 # Threading
 threads:
-  max_workers: 20
+  max_workers: 5
   timeout: 300
 
 # Metadata output
-metadata_path: "/config/metadata/"
+metadata_path: "/path/to/metadata/"
 
 # Asset management
-assets:
-  assets_path: "/config/assets/"
-  poster_filename: "poster.jpg"
-  season_filename: "Season{season_number:02}.jpg"
-  cleanup_orphans: true
-  thread_count: 10
+assets_path: "/path/to/assets/"
 
 # Poster selection preferences
 poster_selection:
@@ -49,8 +47,8 @@ poster_selection:
   preferred_height: 3000
   min_width: 1000
   min_height: 1500
-  preferred_vote: 7.0
-  vote_relaxed: 5.0
+  preferred_vote: 5.0
+  vote_relaxed: 3.5
   vote_average_threshold: 5.0
 
 # Network and retry settings
@@ -62,5 +60,4 @@ network:
   pool_maxsize: 100
 
 # Dry run
-dry_run_default: false
 dry_run: false

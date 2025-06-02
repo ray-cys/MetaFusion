@@ -11,7 +11,7 @@ config = load_config()
 def get_best_poster(
     images,
     preferred_language="en",
-    fallback_languages=None,
+    fallback=None,
     preferred_vote=None,
     preferred_width=None,
     preferred_height=None,
@@ -26,8 +26,8 @@ def get_best_poster(
         logging.debug("[Assets Selection] No images available to select the best poster.")
         return None
 
-    fallback_languages = fallback_languages or []
-    language_priority = [preferred_language] + fallback_languages
+    fallback = fallback or []
+    language_priority = [preferred_language] + fallback
 
     # Use config defaults if not provided
     poster_sel = config["poster_selection"]
@@ -174,7 +174,7 @@ def generate_temp_path(library_name, extension="jpg"):
     """
     Generate a temporary file path for storing a poster image.
     """
-    assets_path = Path(config["assets"]["assets_path"])
+    assets_path = Path(config["assets_path"])
     temp_dir = assets_path / library_name
     temp_dir.mkdir(parents=True, exist_ok=True)
     temp_filename = f"temp_{uuid.uuid4().hex}.{extension}"
