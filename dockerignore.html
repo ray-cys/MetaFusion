@@ -1,7 +1,56 @@
-<html>
-<head><title>404 Not Found</title></head>
-<body>
-<center><h1>404 Not Found</h1></center>
-<hr><center>nginx</center>
-</body>
-</html>
+# .dockerignore
+# Ignore everything not needed for the Docker build context
+
+# Python cache and compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+.env/
+.venv/
+env/
+venv/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE/project files
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# Logs and runtime files
+logs/
+*.log
+*.pid
+
+# Cache and temp files
+cache/
+*.db
+*.sqlite
+*.bak
+*.tmp
+
+# Metadata and assets (user-generated, not source)
+metadata/
+assets/
+
+# Sensitive or user-specific config (let user mount their own)
+config.yml
+
+# Test output
+test_output/
+coverage/
+htmlcov/
+*.cover
+
+# Ignore requirements lock if present
+poetry.lock
+Pipfile.lock
+
+# Ignore Jupyter notebooks (if any)
+*.ipynb
