@@ -4,12 +4,6 @@ from pathlib import Path
 def get_plex_libraries(plex):
     """
     Retrieve a list of Plex libraries with their titles and types.
-
-    Args:
-        plex (PlexServer): The Plex server connection object.
-
-    Returns:
-        list: A list of dictionaries, each containing 'title' and 'type' of a library.
     """
     try:
         # Batch fetch all sections once
@@ -24,12 +18,6 @@ def get_plex_libraries(plex):
 def get_existing_plex_seasons_episodes(plex_item):
     """
     Get a mapping of seasons to episode numbers for a given Plex TV show item.
-
-    Args:
-        plex_item: The Plex TV show item.
-
-    Returns:
-        dict: A dictionary mapping season index to a list of episode numbers.
     """
     seasons_episodes = {}
     try:
@@ -47,12 +35,6 @@ def get_existing_plex_seasons_episodes(plex_item):
 def get_plex_movie_directory(item):
     """
     Get the directory name containing the movie file for a Plex movie item.
-
-    Args:
-        item: The Plex movie item.
-
-    Returns:
-        str: The name of the directory containing the movie file.
     """
     try:
         # Use iterParts only once and return on first valid part
@@ -69,12 +51,6 @@ def get_plex_movie_directory(item):
 def get_plex_show_directory(item):
     """
     Get the directory name containing the show files for a Plex TV show item.
-
-    Args:
-        item: The Plex TV show item.
-
-    Returns:
-        str: The name of the directory containing the show's files.
     """
     try:
         # Cache episodes locally and return on first valid part
@@ -94,12 +70,6 @@ def get_plex_show_directory(item):
 def safe_title_year(item):
     """
     Safely get the title and year string for a Plex item.
-
-    Args:
-        item: The Plex item (movie or show).
-
-    Returns:
-        str: A string in the format "Title (Year)".
     """
     title = getattr(item, "title", None) or "Unknown Title"
     year = getattr(item, "year", None) or "Unknown Year"

@@ -1,4 +1,6 @@
-# .gitignore
+# .dockerignore
+# Ignore everything not needed for the Docker build context
+
 # Python cache and compiled files
 __pycache__/
 *.pyc
@@ -37,14 +39,8 @@ cache/
 metadata/
 assets/
 
-# Sensitive or user-specific config
+# Sensitive or user-specific config (let user mount their own)
 config.yml
-
-# TMDb and other caches
-cache/
-cache/*
-!/cache/.gitkeep
-*.json
 
 # Test output
 test_output/

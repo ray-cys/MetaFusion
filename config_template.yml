@@ -1,8 +1,8 @@
-# Plex Metadata Generator & Asset Downloader Configuration
+# Plex Metadata Generator & Asset Downloader Configuration Template
 
-#Plex server configuration
+# Plex server configuration
 plex:
-  url: "http://localhost:32400"
+  url: "http://your-plex-server:32400"
   token: "YOUR_PLEX_TOKEN"
 
 # TMDb API configuration
@@ -15,7 +15,7 @@ tmdb:
     - ja
     - zh-yue
 
-# Plex libraries
+# Plex libraries to process
 preferred_libraries:
   - Movies
   - TV Shows
@@ -24,11 +24,12 @@ cleanup_orphans: true
 
 # Logging
 log_level: "INFO"
-log_file: "metadata.log"
+log_file: "metafusion.log"
+log_path: "/config/logs/"
 
 # Threading
 threads:
-  max_workers: 10
+  max_workers: 20
   timeout: 300
 
 # Metadata output
@@ -36,7 +37,7 @@ metadata_path: "/config/metadata/"
 
 # Asset management
 assets:
-  assets_path: "/path/to/assets"
+  assets_path: "/config/assets/"
   poster_filename: "poster.jpg"
   season_filename: "Season{season_number:02}.jpg"
   cleanup_orphans: true
@@ -59,9 +60,6 @@ network:
   timeout: 10
   pool_connections: 100
   pool_maxsize: 100
-
-# Cache
-cache_file: "tmdb_cache.json"
 
 # Dry run
 dry_run_default: false

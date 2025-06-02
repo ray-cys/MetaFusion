@@ -1,66 +1,56 @@
-import json
+import os
+import orjson
 import logging
-import re
 import time
-from pathlib import Path
-from threading import Lock
 import requests
-from datetime import datetime
+from pathlib import Path
+from threading import RLock
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from helper.config import load_config
 
 config = load_config()
+cache_lock = RLock()
 
-cache_lock = Lock()
-CACHE_DIR = Path(__file__).parent.parent / "cache"
-CACHE_DIR.mkdir(exist_ok=True)
-CACHE_FILE = CACHE_DIR / config.get("cache_file", "tmdb_cache.json")
-FAILED_CACHE_FILE = CACHE_DIR / "failed_items.json"
+if os.environ.get("DOCKER_ENV", "0") == "1":
+    CACHE_PATH = Path.cwd() / "cache"
+else:
+    CACHE_PATH = Path(__file__).parent.parent / "cache"
+CACHE_PATH.mkdir(exist_ok=True)
+CACHE_FILE = CACHE_PATH / "tmdb_cache.json"
+FAILED_CACHE_FILE = CACHE_PATH / "failed_items.json"
 
 def load_cache():
     """
     Load the TMDb cache from disk.
-
-    Returns:
-        dict: The loaded cache dictionary, or an empty dict if not found.
     """
-    if CACHE_FILE.exists():
-        with open(CACHE_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+    if CACHE_FILE.exists() and CACHE_FILE.stat().st_size > 0:
+        with open(CACHE_FILE, "rb") as f:
+            return orjson.loads(f.read())
     return {}
 
 def save_cache(cache):
     """
     Save the TMDb cache to disk.
-
-    Args:
-        cache (dict): The cache dictionary to save.
     """
-    with open(CACHE_FILE, "w", encoding="utf-8") as f:
-        json.dump(cache, f, indent=4, ensure_ascii=False)
+    with open(CACHE_FILE, "wb") as f:
+        f.write(orjson.dumps(cache, option=orjson.OPT_INDENT_2))
 
 def load_failed_cache():
     """
     Load the failed TMDb lookups cache from disk.
-
-    Returns:
-        dict: The loaded failed cache dictionary, or an empty dict if not found.
     """
-    if FAILED_CACHE_FILE.exists():
-        with open(FAILED_CACHE_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+    if FAILED_CACHE_FILE.exists() and FAILED_CACHE_FILE.stat().st_size > 0:
+        with open(FAILED_CACHE_FILE, "rb") as f:
+            return orjson.loads(f.read())
     return {}
 
 def save_failed_cache(failed_items):
     """
     Save the failed TMDb lookups cache to disk.
-
-    Args:
-        failed_items (dict): The failed cache dictionary to save.
     """
-    with open(FAILED_CACHE_FILE, "w", encoding="utf-8") as f:
-        json.dump(failed_items, f, indent=4, ensure_ascii=False)
+    with open(FAILED_CACHE_FILE, "wb") as f:
+        f.write(orjson.dumps(failed_items, option=orjson.OPT_INDENT_2))
 
 tmdb_cache = load_cache()
 failed_cache = load_failed_cache()
@@ -83,24 +73,11 @@ tmdb_session.mount("https://", adapter)
 def safe_get_with_retries(url, params=None, retries=None, backoff_factor=None, cache=True, **kwargs):
     """
     Make a GET request with retries and optional in-memory response caching.
-
-    Args:
-        url (str): The URL to request.
-        params (dict, optional): Query parameters for the request.
-        retries (int, optional): Number of retry attempts.
-        backoff_factor (float, optional): Backoff multiplier between retries.
-        cache (bool, optional): Whether to use in-memory response cache.
-        **kwargs: Additional arguments for requests.get.
-
-    Returns:
-        requests.Response or None: The response object if successful, else None.
     """
     backoff = backoff_factor if backoff_factor is not None else config["network"].get("backoff_factor", 1)
     max_retries = retries if retries is not None else config["network"].get("max_retries", 3)
     timeout = config["network"].get("timeout", 10)
-    cache_key = f"{url}:{json.dumps(params, sort_keys=True)}"
-
-    # Use in-memory cache if enabled
+    cache_key = f"{url}:{orjson.dumps(params or {}, option=orjson.OPT_SORT_KEYS).decode()}"
     if cache and cache_key in tmdb_response_cache:
         logging.debug(f"[API Cache] Returning cached response for URL: {url}")
         return tmdb_response_cache[cache_key]
@@ -122,20 +99,8 @@ def safe_get_with_retries(url, params=None, retries=None, backoff_factor=None, c
 def tmdb_api_request(endpoint, params=None, retries=3, delay=2, backoff_factor=2, api_key=None, language=None, region=None):
     """
     Make a TMDb API request with retries and exponential backoff.
-
-    Args:
-        endpoint (str): TMDb API endpoint (e.g., "search/movie").
-        params (dict, optional): Query parameters.
-        retries (int, optional): Number of retry attempts.
-        delay (int, optional): Initial delay between retries.
-        backoff_factor (float, optional): Exponential backoff multiplier.
-        api_key (str, optional): TMDb API key.
-        language (str, optional): Language code.
-        region (str, optional): Region code.
-
-    Returns:
-        dict or None: The JSON response data, or None if all attempts fail.
     """
+    logging.debug(f"[TMDb] Requesting {endpoint} for {params}")
     if api_key is None:
         api_key = config["tmdb"]["api_key"]
     if language is None:
@@ -153,12 +118,18 @@ def tmdb_api_request(endpoint, params=None, retries=3, delay=2, backoff_factor=2
         params["region"] = region
     query.update(params)
 
+    cache_key = f"{url}:{orjson.dumps(query, option=orjson.OPT_SORT_KEYS).decode()}"
+    if cache_key in tmdb_response_cache:
+        logging.debug(f"[TMDb API] Returning in-memory cached response for {url}")
+        return tmdb_response_cache[cache_key]
+
     for attempt in range(1, retries + 1):
         try:
             response = tmdb_session.get(url, params=query, timeout=20)
             if response.status_code == 200:
                 data = response.json()
                 if data:
+                    tmdb_response_cache[cache_key] = data
                     logging.debug(f"[TMDb API Response] URL: {response.url}")
                     return data
                 else:
@@ -176,19 +147,12 @@ def tmdb_api_request(endpoint, params=None, retries=3, delay=2, backoff_factor=2
             logging.info(f"[TMDb API] Retrying in {sleep_time}s... (Attempt {attempt + 1}/{retries})")
             time.sleep(sleep_time)
     logging.error(f"[TMDb API] Failed after {retries} attempts for {url}")
+    logging.debug(f"[TMDb] Finished {endpoint} for {params}")
     return None
 
 def tmdb_find_id(title, year, media_type):
     """
     Search TMDb for a title and year, returning the best-matched TMDb ID.
-
-    Args:
-        title (str): The title to search for.
-        year (int or str or None): The year of the media.
-        media_type (str): "movie" or "tv".
-
-    Returns:
-        int or None: The TMDb ID if found, else None.
     """
     logging.debug(f"[TMDb Search] Searching for Title: {title}, Year: {year}, Type: {media_type}")
     endpoint = f"search/{media_type}"
@@ -214,18 +178,16 @@ def tmdb_find_id(title, year, media_type):
     return None
 
 def resolve_tmdb_id(item, title, year, media_type):
+    import re
     """
     Resolve the TMDb ID for a given item, using cache, Plex GUIDs, or TMDb search.
-
-    Args:
-        item: The Plex item (may be None).
-        title (str): The title of the media.
-        year (int or str): The year of the media.
-        media_type (str): "movie" or "tv".
-
-    Returns:
-        int or None: The resolved TMDb ID, or None if not found.
     """
+    # Standardize media_type
+    media_type = media_type.lower()
+    if media_type == "show":
+        media_type = "tv"
+    elif media_type != "movie" and media_type != "tv":
+        media_type = "movie"
     cache_key = f"{media_type}:{title}:{year}"
     with cache_lock:
         if cache_key in tmdb_cache:
@@ -280,23 +242,21 @@ def resolve_tmdb_id(item, title, year, media_type):
 
     return tmdb_id
 
-def update_tmdb_cache(cache_key, tmdb_id, title, year, media_type):
+def update_tmdb_cache(cache_key, tmdb_id, title, year, media_type, **kwargs):
+    from datetime import datetime
     """
     Update the TMDb cache with a new or updated entry.
-
-    Args:
-        cache_key (str): The cache key for the entry.
-        tmdb_id (int): The TMDb ID.
-        title (str): The title of the media.
-        year (int or str): The year of the media.
-        media_type (str): "movie" or "tv".
     """
     with cache_lock:
-        tmdb_cache[cache_key] = {
-            "tmdb_id": tmdb_id,
-            "title": title,
-            "year": year,
-            "media_type": media_type,
-            "last_updated": datetime.now().isoformat()
-        }
+        entry = tmdb_cache.get(cache_key, {})
+        # Always update these fields
+        entry["tmdb_id"] = tmdb_id
+        entry["title"] = title
+        entry["year"] = year
+        entry["media_type"] = media_type
+        entry["last_updated"] = datetime.now().isoformat()
+        # Optionally update any extra fields passed as kwargs
+        for k, v in kwargs.items():
+            entry[k] = v
+        tmdb_cache[cache_key] = entry
         save_cache(tmdb_cache)

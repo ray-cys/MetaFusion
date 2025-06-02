@@ -1,9 +1,15 @@
-import yaml
+import os
 import logging
+from ruamel.yaml import YAML
 from pathlib import Path
 
 # Path to the user configuration file
-CONFIG_FILE = Path(__file__).parent.parent / "config.yml"
+CONFIG_FILE = Path(
+    os.environ.get(
+        "CONFIG_FILE",
+        str(Path(__file__).parent.parent / "config.yml")
+    )
+)
 
 # Default configuration at module level
 DEFAULT_CONFIG = {
@@ -35,7 +41,6 @@ DEFAULT_CONFIG = {
         "vote_relaxed": 5.0,
         "vote_average_threshold": 5.0
     },
-    "cache_file": "tmdb_cache.json",
     "preferred_libraries": ["Movies", "TV Shows"],
     "threads": {"max_workers": 5, "timeout": 300},
     "network": {
@@ -47,7 +52,7 @@ DEFAULT_CONFIG = {
     },
     "log_level": "INFO",
     "log_file": "metadata.log",
-    "log_dir": "logs",
+    "log_path": "logs",
     "cleanup": {"run_by_default": True, "skip_by_default": False},
     "dry_run_default": False,
     "process_libraries": True,
@@ -57,15 +62,6 @@ DEFAULT_CONFIG = {
 def warn_unknown_keys(user_cfg, default_cfg, parent_key=""):
     """
     Warn about unknown keys in the user configuration.
-
-    Recursively checks the user configuration dictionary for any keys
-    that are not present in the default configuration, and logs a warning
-    for each unknown key found.
-
-    Args:
-        user_cfg (dict): The user-provided configuration dictionary.
-        default_cfg (dict): The default configuration dictionary.
-        parent_key (str, optional): The parent key path for nested keys (used internally).
     """
     for key in user_cfg:
         if key not in default_cfg:
@@ -79,15 +75,6 @@ def warn_unknown_keys(user_cfg, default_cfg, parent_key=""):
 def deep_merge_dicts(default, user):
     """
     Recursively merge user configuration into the default configuration.
-
-    For each key in the user configuration:
-      - If the value is a dictionary and the default also has a dictionary for that key,
-        merge them recursively.
-      - Otherwise, override the default value with the user value.
-
-    Args:
-        default (dict): The default configuration dictionary (modified in place).
-        user (dict): The user-provided configuration dictionary.
     """
     for k, v in user.items():
         if isinstance(v, dict) and isinstance(default.get(k), dict):
@@ -97,27 +84,48 @@ def deep_merge_dicts(default, user):
             # Override default value with user value
             default[k] = v
 
+def apply_env_overrides(config, prefix=""):
+    """
+    Recursively override config values with environment variables.
+    For nested keys, use underscores, e.g., PLEX_URL, ASSETS_ASSETS_PATH.
+    """
+    for key, value in config.items():
+        env_key = (prefix + "_" + key).upper() if prefix else key.upper()
+        if isinstance(value, dict):
+            apply_env_overrides(value, env_key)
+        else:
+            env_val = os.environ.get(env_key)
+            if env_val is not None:
+                # Try to cast to correct type (bool, int, float)
+                if isinstance(value, bool):
+                    config[key] = env_val.lower() in ("1", "true", "yes", "on")
+                elif isinstance(value, int):
+                    try:
+                        config[key] = int(env_val)
+                    except ValueError:
+                        config[key] = value
+                elif isinstance(value, float):
+                    try:
+                        config[key] = float(env_val)
+                    except ValueError:
+                        config[key] = value
+                else:
+                    config[key] = env_val
+
 def load_config():
     """
-    Load the configuration from config.yml, merging it with the default configuration.
-
-    Loads the user configuration from config.yml (if it exists), warns about any unknown keys,
-    and merges it recursively into the default configuration. If the config file is missing
-    or invalid, the default configuration is used.
-
-    Returns:
-        dict: The merged configuration dictionary.
+    Load the configuration from config.yml, merging it with the default configuration,
+    and override any value with environment variables if present.
     """
-    # Start with a copy of the default config
     config = DEFAULT_CONFIG.copy()
     if CONFIG_FILE.exists():
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             try:
-                user_config = yaml.safe_load(f) or {}
-                # Warn about unknown keys in user config
+                yaml = YAML()
+                user_config = yaml.load(f) or {}
                 warn_unknown_keys(user_config, DEFAULT_CONFIG)
-                # Merge user config into default config
                 deep_merge_dicts(config, user_config)
             except yaml.YAMLError:
                 logging.error("[Config] Failed to parse config.yml. Using default configuration.")
+    apply_env_overrides(config)
     return config

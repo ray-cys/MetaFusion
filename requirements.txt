@@ -1,6 +1,7 @@
 requests
 plexapi
-PyYAML
+ruamel.yaml
+orjson
 pycountry
 Pillow
 tqdm
