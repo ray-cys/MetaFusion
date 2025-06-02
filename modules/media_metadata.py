@@ -1,6 +1,4 @@
 import logging
-import pycountry
-from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 from helper.tmdb import (
     tmdb_api_request, resolve_tmdb_id, update_tmdb_cache, tmdb_response_cache
 )
@@ -38,6 +36,7 @@ def smart_update_needed(existing_metadata, new_metadata):
     return changed_fields
 
 def build_movie_metadata(plex_item, consolidated_metadata, dry_run=False, existing_yaml_data=None):
+    import pycountry
     """
     Build and consolidate metadata for a movie Plex item using TMDb data.
     """
@@ -150,18 +149,18 @@ def build_movie_metadata(plex_item, consolidated_metadata, dry_run=False, existi
         "studio", "tagline", "summary", "country", "genre", "cast", "director", "writer", "producer", "collection"
     ]
     # Log completeness of metadata
-    percent = log_metadata_completeness("MOVIE", full_title, new_metadata, movie_expected_fields)
+    percent = log_metadata_completeness("[Movie Metadata]", full_title, new_metadata, movie_expected_fields)
 
     # Smart update: check if anything changed
     if existing_yaml_data:
         existing_metadata = existing_yaml_data.get("metadata", {}).get(full_title, {})
         changes = smart_update_needed(existing_metadata, new_metadata)
         if not changes:
-            logging.info(f"[Smart Update] No changes for {full_title}. Preserving existing metadata.")
+            logging.debug(f"[Metadata Update] No changes for {full_title}. Preserving existing metadata.")
             consolidated_metadata["metadata"][full_title] = existing_metadata
             return
         else:
-            logging.debug(f"[Smart Update] Fields changed for {full_title}: {changes}")
+            logging.debug(f"[Metadata Update] Fields changed for {full_title}: {changes}")
     
     metadata_entry = {
         "match": {
@@ -173,7 +172,7 @@ def build_movie_metadata(plex_item, consolidated_metadata, dry_run=False, existi
     }
 
     if dry_run:
-        logging.info(f"[Dry Run] Would build metadata for Movie: {full_title}")
+        logging.info(f"[Metadata Dry Run] Would build metadata for Movie: {full_title}")
         return
 
     # Save metadata and update cache
@@ -182,10 +181,12 @@ def build_movie_metadata(plex_item, consolidated_metadata, dry_run=False, existi
     # Use standardized cache key format
     cache_key = f"movie:{title}:{year}"
     update_tmdb_cache(cache_key, tmdb_id, title, year, "movie")
-    logging.info(f"[Metadata] Movie metadata built and saved for {full_title} using TMDb ID {tmdb_id}.")
+    logging.debug(f"[Metadata] Movie metadata built and saved for {full_title} using TMDb ID {tmdb_id}.")
     return percent
 
 def build_tv_metadata(plex_item, consolidated_metadata, dry_run=False, existing_yaml_data=None):
+    import pycountry
+    from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
     """
     Build and consolidate metadata for a TV show Plex item using TMDb data.
     """
@@ -212,7 +213,7 @@ def build_tv_metadata(plex_item, consolidated_metadata, dry_run=False, existing_
         details = tmdb_api_request(
             details_key,
             params={
-                "append_to_response": "credits,keywords,content_ratings",
+                "append_to_response": "credits,keywords,content_ratings,external_ids",
                 "language": config.get("tmdb", {}).get("language", "en"),
                 "region": config.get("tmdb", {}).get("region", "US")
             }
@@ -331,18 +332,12 @@ def build_tv_metadata(plex_item, consolidated_metadata, dry_run=False, existing_
                 if season_data:
                     seasons_data[season_number] = season_data
         except TimeoutError:
-            logging.error(f"[Timeout] Season processing exceeded {timeout_seconds} seconds.")
+            logging.error(f"[Metadata Timeout] Season processing exceeded {timeout_seconds} seconds.")
         except Exception as e:
-            logging.error(f"[Error] Season processing exception: {e}")
+            logging.error(f"[Metadata Error] Season processing exception: {e}")
 
     # Fetch external IDs for mapping
-    external_ids_key = f"tv/{tmdb_id_int}/external_ids"
-    external_ids = tmdb_response_cache.get(external_ids_key)
-    if not external_ids:
-        external_ids = tmdb_api_request(external_ids_key)
-        if external_ids:
-            tmdb_response_cache[external_ids_key] = external_ids
-
+    external_ids = details.get("external_ids", {})
     tvdb_id_for_mapping = external_ids.get("tvdb_id", "") if external_ids else ""
     imdb_id_for_mapping = external_ids.get("imdb_id", "") if external_ids else ""
     mapping_id = int(tvdb_id_for_mapping) if tvdb_id_for_mapping else imdb_id_for_mapping or ""
@@ -382,7 +377,7 @@ def build_tv_metadata(plex_item, consolidated_metadata, dry_run=False, existing_
 
     grand_expected_fields = list(grand_metadata.keys())
     grand_percent = log_metadata_completeness(
-        "SHOW", full_title, grand_metadata, grand_expected_fields
+        "[TV Show Metadata]", full_title, grand_metadata, grand_expected_fields
     )
 
     # Smart update: check if anything changed
@@ -390,12 +385,12 @@ def build_tv_metadata(plex_item, consolidated_metadata, dry_run=False, existing_
         existing_metadata = existing_yaml_data.get("metadata", {}).get(full_title, {})
         changes = smart_update_needed(existing_metadata, new_metadata)
         if not changes:
-            logging.info(f"[Smart Update] No changes for {full_title}. Preserving existing metadata.")
+            logging.debug(f"[Metadata Update] No changes for {full_title}. Preserving existing metadata.")
             consolidated_metadata["metadata"][full_title] = existing_metadata
             return grand_percent
 
     if dry_run:
-        logging.info(f"[Dry Run] Would build metadata for TV Show: {full_title}")
+        logging.info(f"[Metadata Dry Run] Would build metadata for TV Show: {full_title}")
         return
 
     # Save metadata and update cache
@@ -404,5 +399,5 @@ def build_tv_metadata(plex_item, consolidated_metadata, dry_run=False, existing_
     # Use standardized cache key format
     cache_key = f"tv:{title}:{year}"
     update_tmdb_cache(cache_key, tmdb_id_int, title, year, "tv")
-    logging.info(f"[Metadata] TV metadata built and saved for {full_title} using TMDb ID {tmdb_id}.")
+    logging.debug(f"[Metadata] TV metadata built and saved for {full_title} using TMDb ID {tmdb_id}.")
     return grand_percent
