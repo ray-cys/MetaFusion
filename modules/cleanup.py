@@ -1,15 +1,10 @@
-import json
 import logging
-import yaml
-import re
 from pathlib import Path
 from helper.config import load_config
 from helper.tmdb import tmdb_cache, save_cache
 from helper.plex import get_plex_movie_directory, get_plex_show_directory
 
-
 config = load_config()
-METADATA_DIR = Path(config["metadata_path"])
 
 def cleanup_orphans(
     plex,
@@ -19,6 +14,7 @@ def cleanup_orphans(
     season_filename=None,
     existing_assets=None
 ):
+    from ruamel.yaml import YAML
     """
     Cleans up orphaned metadata entries and asset files.
     """
@@ -65,13 +61,14 @@ def cleanup_orphans(
     preferred_filenames = {
         f"{lib.lower().replace(' ', '_')}.yml" for lib in preferred_libraries
     }
-    for metadata_file in METADATA_DIR.glob("*.yml"):
+    for metadata_file in Path(config["metadata_path"]).glob("*.yml"):
         if metadata_file.name not in preferred_filenames:
             logging.info(f"[Cleanup] Skipping non-preferred library file: {metadata_file.name}")
             continue
         try:
             with open(metadata_file, "r", encoding="utf-8") as f:
-                metadata_content = yaml.safe_load(f) or {}
+                yaml = YAML()
+                metadata_content = yaml.load(f) or {}
 
             metadata_entries = metadata_content.get("metadata", {})
             cleaned_metadata = {k: v for k, v in metadata_entries.items() if k in global_existing_titles}
@@ -82,7 +79,9 @@ def cleanup_orphans(
             if orphans_in_file > 0:
                 metadata_content["metadata"] = cleaned_metadata
                 with open(metadata_file, "w", encoding="utf-8") as f:
-                    yaml.dump(metadata_content, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+                    yaml.default_flow_style = False
+                    yaml.allow_unicode = True
+                    yaml.dump(metadata_content, f)
                 logging.info(f"[Cleanup] Removed {orphans_in_file} orphans from {metadata_file.name}")
 
         except Exception as e:
