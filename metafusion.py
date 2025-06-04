@@ -1,45 +1,29 @@
-#!/usr/bin/env python3
-# ---------------------------------------------------------
-# Plex Metadata & Asset Generator
-# Features:
-# - Extracts and processes libraries from Plex
-# - Uses multi-threading for fast, parallel metadata and asset processing
-# - Fetches and consolidates TMDb metadata for movies and TV shows
-# - Downloads, upgrades, and manages poster/season assets
-# - Cleans up orphaned metadata and asset files for a tidy library
-# - Outputs YAML metadata compatible with Kometa and similar tools
-# ---------------------------------------------------------
-
 import sys
 import time
 import cProfile
 import pstats
+import asyncio
 from helper.config import load_config
 from helper.logging import setup_logging
 from helper.plex import get_plex_libraries
-from helper.stats import human_readable_size 
+from helper.stats import human_readable_size
 
-# Load configuration and set up logger
 config = load_config()
 logger = setup_logging(config)
 
 if __name__ == "__main__":
     from plexapi.server import PlexServer
-    from modules.processing import process_library
+    from modules.processing import process_library_async
     from modules.cleanup import cleanup_orphans
-    """
-    Main entry point for MetaFusion script.
-    """
+
     profiler = cProfile.Profile()
     profiler.enable()
-    try:
+
+    async def main():
         start_time = time.time()
         library_item_counts = {}
-
-        # Get list of libraries to process from config
         selected_libraries = config.get("preferred_libraries", ["Movies", "TV Shows"])
 
-        # Connect to Plex server
         try:
             plex = PlexServer(config["plex"]["url"], config["plex"]["token"])
             logger.info("[Startup] Successfully connected to Plex.")
@@ -47,57 +31,57 @@ if __name__ == "__main__":
             logger.error(f"[Startup] Failed to connect to Plex: {e}")
             sys.exit(1)
 
-        # Retrieve Plex libraries
         libraries = get_plex_libraries(plex)
         if not libraries:
             logger.warning("[Startup] No Plex libraries found. Exiting.")
             sys.exit(0)
 
-        orphans_removed = 0
-
-        # Flags for processing cleanup
         cleanup_orphans_flag = config.get("cleanup_orphans", True)
-
-        # Metadata & Asset summary tracking
         metadata_summaries = {}
         library_filesize = {}
 
+        # Prepare async tasks for all libraries
+        tasks = []
         for lib in libraries:
             library_name = lib.get("title")
             if library_name not in selected_libraries:
                 logger.info(f"[Library Skip] Skipping library: {library_name}")
                 continue
 
-            # Create shared caches for this library
             movie_cache = {}
             season_cache = {}
             episode_cache = {}
 
-            process_library(
-                plex=plex,
-                library_name=library_name,
-                dry_run=config.get("dry_run", False),
-                library_item_counts=library_item_counts,
-                metadata_summaries=metadata_summaries,
-                library_filesize=library_filesize,
-                season_cache=season_cache,
-                episode_cache=episode_cache,
-                movie_cache=movie_cache
+            tasks.append(
+                process_library_async(
+                    plex=plex,
+                    library_name=library_name,
+                    dry_run=config.get("dry_run", False),
+                    library_item_counts=library_item_counts,
+                    metadata_summaries=metadata_summaries,
+                    library_filesize=library_filesize,
+                    season_cache=season_cache,
+                    episode_cache=episode_cache,
+                    movie_cache=movie_cache
+                )
             )
 
-        # Optionally clean up orphaned metadata and assets
+        # Run all library processing in parallel
+        await asyncio.gather(*tasks)
+
+        # Clean up orphaned metadata and assets (configurable in config)
+        orphans_removed = 0
         if cleanup_orphans_flag:
-            orphans_removed = cleanup_orphans(
+            orphans_removed = await cleanup_orphans(
                 plex,
                 libraries=[lib.get("title") for lib in libraries if lib.get("title") in selected_libraries],
                 asset_path=config["assets_path"],
             )
 
-        # Calculate elapsed time
+        # Final summary report
         elapsed_time = time.time() - start_time
         minutes, seconds = divmod(int(elapsed_time), 60)
 
-        # --- Summary Report ---
         logger.info("=" * 60)
         logger.info("METAFUSION SUMMARY REPORT")
         logger.info("=" * 60)
@@ -111,10 +95,10 @@ if __name__ == "__main__":
         for lib_name, count in library_item_counts.items():
             logger.info(f"  - {lib_name}: {count} items processed")
         logger.info("[Per-Library Metadata Stats]")
-        metadata_summaries = globals().get("metadata_summaries", {})
         for lib_name, summary in metadata_summaries.items():
             logger.info(
                 f"  - {lib_name}: {summary['complete']}/{summary['total_items']} complete, {summary['incomplete']} incomplete"
+                f", {summary['percent_complete']}% complete"
             )
         logger.info("[Per-Library Downloaded Asset Size]")
         for lib_name, size in library_filesize.items():
@@ -126,10 +110,18 @@ if __name__ == "__main__":
         if cleanup_orphans_flag:
             logger.info(f"  - Titles Removed (Orphans): {orphans_removed}")
         logger.info("=" * 60)
+        
+        # Optionally, show global completeness
+        total_complete = sum(s["complete"] for s in metadata_summaries.values())
+        total_items = sum(s["total_items"] for s in metadata_summaries.values())
+        global_percent = round((total_complete / total_items) * 100, 2) if total_items else 0
+        logger.info(f"[Summary] Global metadata completeness: {global_percent}%")
 
         if config.get("dry_run", False):
             logger.info("[Dry Run] Completed. No files were written.")
 
+    try:
+        asyncio.run(main())
     except Exception as e:
         logger.error(f"[Fatal] Unhandled exception: {e}", exc_info=True)
         sys.exit(1)

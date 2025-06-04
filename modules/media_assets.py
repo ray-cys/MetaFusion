@@ -2,38 +2,38 @@ import logging
 import shutil
 from pathlib import Path
 from helper.config import load_config
-from helper.tmdb import tmdb_cache, cache_lock, save_cache, update_tmdb_cache
-from helper.stats import human_readable_size
-from modules.assets import (
-    download_poster, should_upgrade, generate_temp_path, get_best_poster
+from helper.cache import save_cache
+from helper.tmdb import (
+    tmdb_cache, update_tmdb_cache, download_poster, tmdb_api_request
 )
 from helper.plex import get_plex_movie_directory, get_plex_show_directory, safe_title_year
-from helper.tmdb import safe_get_with_retries
+from helper.stats import human_readable_size
+from modules.assets import (
+    should_upgrade, generate_temp_path, get_best_poster, get_best_background
+)
 
 config = load_config()
 
-def process_poster_for_media(media_type, tmdb_id, item, library_name, existing_assets, episode_cache=None, movie_cache=None):
+async def process_poster_for_media(media_type, tmdb_id, item, library_name, existing_assets, episode_cache=None, movie_cache=None):
     """
     Download and process the best poster for a movie or TV show item.
     """
     logging.debug(f"[Script State] Processing Movies & TV Shows poster: TMDb ID {tmdb_id}")
     preferred_language = config["tmdb"].get("language", "en").split("-")[0]
     # Fetch metadata and images from TMDb
-    response = safe_get_with_retries(
-        f"https://api.themoviedb.org/3/{media_type}/{tmdb_id}",
+    response_data = await tmdb_api_request(
+        f"{media_type}/{tmdb_id}",
         params={
-            "api_key": config["tmdb"]["api_key"],
             "append_to_response": "images",
             "language": config["tmdb"].get("language", "en"),
             "include_image_language": f"{preferred_language},null"
         }
     )
 
-    if not response:
+    if not response_data:
         logging.warning(f"[Assets Fetch] Failed to fetch poster data for {safe_title_year(item)}. Skipping...")
         return 0
 
-    response_data = response.json()
     images = response_data.get("images", {}).get("posters", [])
     fallback = config["tmdb"].get("fallback", [])
     best = get_best_poster(images, preferred_language=preferred_language, fallback=fallback)
@@ -43,7 +43,7 @@ def process_poster_for_media(media_type, tmdb_id, item, library_name, existing_a
         return 0
 
     # Determine asset path based on media type
-    parent_dir = get_plex_show_directory(item, _episode_cache=episode_cache) if media_type == "tv" else get_plex_movie_directory(item, _movie_cache=movie_cache)
+    parent_dir = (await get_plex_show_directory(item, _episode_cache=episode_cache)) if media_type == "tv" else (await get_plex_movie_directory(item, _movie_cache=movie_cache))
     asset_path = Path(config["assets_path"]) / library_name / parent_dir / "poster.jpg"
     temp_path = generate_temp_path(library_name)
     # Standardize media_type
@@ -64,7 +64,7 @@ def process_poster_for_media(media_type, tmdb_id, item, library_name, existing_a
             return 0
 
         # Download poster and check if upgrade is needed
-        if download_poster(best["file_path"], temp_path, item) and temp_path.exists():
+        if await download_poster(best["file_path"], temp_path, item) and temp_path.exists():
             downloaded_size = temp_path.stat().st_size
             if should_upgrade(asset_path, best, new_image_path=temp_path, cache_key=cache_key, item=item):
                 asset_path.parent.mkdir(parents=True, exist_ok=True)
@@ -74,12 +74,11 @@ def process_poster_for_media(media_type, tmdb_id, item, library_name, existing_a
                 if cache_key in tmdb_cache and isinstance(tmdb_cache[cache_key], dict):
                     update_tmdb_cache(cache_key, tmdb_id, title, year, media_type, poster_average=best.get("vote_average"))
                 else:
-                    with cache_lock:
-                        tmdb_cache[cache_key] = {
-                            "tmdb_id": tmdb_id,
-                            "poster_average": best.get("vote_average")
-                        }
-                        save_cache(tmdb_cache)
+                    tmdb_cache[cache_key] = {
+                        "tmdb_id": tmdb_id,
+                        "poster_average": best.get("vote_average")
+                    }
+                    save_cache(tmdb_cache)
             else:
                 logging.info(f"[Assets Download] No poster upgrade needed for {safe_title_year(item)}")
                 temp_path.unlink(missing_ok=True)
@@ -94,28 +93,26 @@ def process_poster_for_media(media_type, tmdb_id, item, library_name, existing_a
     existing_assets.add(str(asset_path.resolve()))
     return downloaded_size
 
-def process_season_poster(tmdb_id, season_number, item, library_name, existing_assets, episode_cache=None):
+async def process_season_poster(tmdb_id, season_number, item, library_name, existing_assets, episode_cache=None):
     """
     Download and process the best poster for a specific TV season.
     """
     logging.debug(f"[Script State] Processing Season poster: TMDb ID {tmdb_id}, Season {season_number}")
     preferred_language = config["tmdb"].get("language", "en").split("-")[0]
     # Fetch season metadata and images from TMDb
-    response = safe_get_with_retries(
-        f"https://api.themoviedb.org/3/tv/{tmdb_id}/season/{season_number}",
+    response_data = await tmdb_api_request(
+        f"tv/{tmdb_id}/season/{season_number}",
         params={
-            "api_key": config["tmdb"]["api_key"],
             "append_to_response": "images",
             "language": config["tmdb"].get("language", "en"),
             "include_image_language": f"{preferred_language},null"
         }
     )
 
-    if not response or response.status_code == 404:
+    if not response_data:
         logging.info(f"[Assets Fetch] No posters found or season not found for {safe_title_year(item)} Season {season_number}. Skipping...")
         return 0
 
-    response_data = response.json()
     images = response_data.get("images", {}).get("posters", [])
     if not images:
         logging.info(f"[Assets Fetch] No season posters available for {safe_title_year(item)} Season {season_number}.")
@@ -127,7 +124,7 @@ def process_season_poster(tmdb_id, season_number, item, library_name, existing_a
         logging.info(f"[Assets Fetch] No suitable season poster found for {safe_title_year(item)} Season {season_number}. Skipping...")
         return 0
 
-    parent_dir = get_plex_show_directory(item, _episode_cache=episode_cache)
+    parent_dir = (await get_plex_show_directory(item, _episode_cache=episode_cache))
     asset_path = Path(config["assets_path"]) / library_name / parent_dir / f"Season{season_number:02}.jpg"
     temp_path = generate_temp_path(library_name)
     title = getattr(item, "title", "Unknown")
@@ -143,7 +140,7 @@ def process_season_poster(tmdb_id, season_number, item, library_name, existing_a
             return 0
 
         # Download poster and check if upgrade is needed
-        if download_poster(best["file_path"], temp_path, item) and temp_path.exists():
+        if await download_poster(best["file_path"], temp_path, item) and temp_path.exists():
             downloaded_size = temp_path.stat().st_size
             if should_upgrade(asset_path, best, new_image_path=temp_path, cache_key=cache_key, item=item, season_number=season_number):
                 asset_path.parent.mkdir(parents=True, exist_ok=True)
@@ -152,12 +149,11 @@ def process_season_poster(tmdb_id, season_number, item, library_name, existing_a
                 if cache_key in tmdb_cache and isinstance(tmdb_cache[cache_key], dict):
                     update_tmdb_cache(cache_key, tmdb_id, title, year, media_type, poster_average=best.get("vote_average"))
                 else:
-                    with cache_lock:
-                        tmdb_cache[cache_key] = {
-                            "tmdb_id": tmdb_id,
-                            "poster_average": best.get("vote_average")
-                        }
-                        save_cache(tmdb_cache)
+                    tmdb_cache[cache_key] = {
+                        "tmdb_id": tmdb_id,
+                        "poster_average": best.get("vote_average")
+                    }
+                    save_cache(tmdb_cache)
             else:
                 temp_path.unlink(missing_ok=True)
                 logging.info(f"[Assets Download] No season poster upgrade needed for {safe_title_year(item)} Season {season_number}")
@@ -172,26 +168,23 @@ def process_season_poster(tmdb_id, season_number, item, library_name, existing_a
     existing_assets.add(str(asset_path.resolve()))
     return downloaded_size
 
-def process_background_for_media(media_type, tmdb_id, item, library_name, existing_assets, episode_cache=None, movie_cache=None):
-    from modules.assets import get_best_background
+async def process_background_for_media(media_type, tmdb_id, item, library_name, existing_assets, episode_cache=None, movie_cache=None):
     """
     Download and process the best background (fanart) for a Movie or TV Show item.
     """
     logging.debug(f"[Script State] Processing Movies & TV Shows background: TMDb ID {tmdb_id}")
     # Fetch metadata and images from TMDb
-    response = safe_get_with_retries(
-        f"https://api.themoviedb.org/3/{media_type}/{tmdb_id}",
+    response_data = await tmdb_api_request(
+        f"{media_type}/{tmdb_id}",
         params={
-            "api_key": config["tmdb"]["api_key"],
             "append_to_response": "images",
         }
     )
 
-    if not response:
+    if not response_data:
         logging.warning(f"[Assets Fetch] Failed to fetch background data for {safe_title_year(item)}. Skipping...")
         return 0
 
-    response_data = response.json()
     images = response_data.get("images", {}).get("backdrops", [])
     if not images:
         logging.info(f"[Assets Fetch] No backgrounds found for {safe_title_year(item)}. Skipping...")
@@ -203,7 +196,7 @@ def process_background_for_media(media_type, tmdb_id, item, library_name, existi
         logging.info(f"[Assets Fetch] No suitable background found for {safe_title_year(item)}. Skipping...")
         return 0
 
-    parent_dir = get_plex_show_directory(item, _episode_cache=episode_cache) if media_type == "tv" else get_plex_movie_directory(item, _movie_cache=movie_cache)
+    parent_dir = (await get_plex_show_directory(item, _episode_cache=episode_cache)) if media_type == "tv" else (await get_plex_movie_directory(item, _movie_cache=movie_cache))
     asset_path = Path(config["assets_path"]) / library_name / parent_dir / "fanart.jpg"
     temp_path = generate_temp_path(library_name)
     title = getattr(item, "title", "Unknown")
@@ -223,7 +216,7 @@ def process_background_for_media(media_type, tmdb_id, item, library_name, existi
             return 0
 
         # Download background and check if upgrade is needed
-        if download_poster(best["file_path"], temp_path, item) and temp_path.exists():
+        if await download_poster(best["file_path"], temp_path, item) and temp_path.exists():
             downloaded_size = temp_path.stat().st_size
             if should_upgrade(asset_path, best, new_image_path=temp_path, cache_key=cache_key, item=item):
                 asset_path.parent.mkdir(parents=True, exist_ok=True)
@@ -233,93 +226,16 @@ def process_background_for_media(media_type, tmdb_id, item, library_name, existi
                 if cache_key in tmdb_cache and isinstance(tmdb_cache[cache_key], dict):
                     update_tmdb_cache(cache_key, tmdb_id, title, year, media_type, bg_average=best.get("vote_average"))
                 else:
-                    with cache_lock:
-                        tmdb_cache[cache_key] = {
-                            "tmdb_id": tmdb_id,
-                            "bg_average": best.get("vote_average")
-                        }
-                        save_cache(tmdb_cache)
+                    tmdb_cache[cache_key] = {
+                        "tmdb_id": tmdb_id,
+                        "bg_average": best.get("vote_average")
+                    }
+                    save_cache(tmdb_cache)
             else:
                 temp_path.unlink(missing_ok=True)
                 logging.info(f"[Assets Download] No background upgrade needed for {safe_title_year(item)}")
         else:
             logging.warning(f"[Assets Download] Background download failed for {safe_title_year(item)}, skipping...")
-    finally:
-        # Clean up temp file if it still exists
-        if temp_path.exists():
-            temp_path.unlink(missing_ok=True)
-
-    # Track processed asset
-    existing_assets.add(str(asset_path.resolve()))
-    return downloaded_size
-
-def process_season_background(tmdb_id, season_number, item, library_name, existing_assets, episode_cache=None):
-    from modules.assets import get_best_background
-    """
-    Download and process the best background (fanart) for a specific TV season.
-    """
-    logging.debug(f"[Script State] Processing Season background: TMDb ID {tmdb_id}, Season {season_number}")
-    # Fetch season metadata and images from TMDb
-    response = safe_get_with_retries(
-        f"https://api.themoviedb.org/3/tv/{tmdb_id}/season/{season_number}",
-        params={
-            "api_key": config["tmdb"]["api_key"],
-            "append_to_response": "images",
-        }
-    )
-
-    if not response or response.status_code == 404:
-        logging.info(f"[Assets Fetch] No backgrounds found or season not found for {safe_title_year(item)} Season {season_number}. Skipping...")
-        return 0
-
-    response_data = response.json()
-    images = response_data.get("images", {}).get("backdrops", [])
-    if not images:
-        logging.info(f"[Assets Fetch] No season backgrounds available for {safe_title_year(item)} Season {season_number}.")
-        return 0
-
-    # Use get_best_background for selection
-    best = get_best_background(images)
-    if not best:
-        logging.info(f"[Assets Fetch] No suitable season background found for {safe_title_year(item)} Season {season_number}. Skipping...")
-        return 0
-
-    parent_dir = get_plex_show_directory(item, _episode_cache=episode_cache)
-    asset_path = Path(config["assets_path"]) / library_name / parent_dir / f"Season{season_number:02}-fanart.jpg"
-    temp_path = generate_temp_path(library_name)
-    title = getattr(item, "title", "Unknown")
-    year = getattr(item, "year", "Unknown")
-    media_type = "tv"
-    cache_key = f"tv:{title}:{year}:season{season_number}"
-
-    downloaded_size = 0
-    try:
-        if config.get("dry_run", False):
-            logging.info(f"[Assets Dry Run] Would process season background for {safe_title_year(item)} Season {season_number}")
-            existing_assets.add(str(asset_path.resolve()))
-            return 0
-
-        # Download background and check if upgrade is needed
-        if download_poster(best["file_path"], temp_path, item) and temp_path.exists():
-            downloaded_size = temp_path.stat().st_size
-            if should_upgrade(asset_path, best, new_image_path=temp_path, cache_key=cache_key, item=item, season_number=season_number):
-                asset_path.parent.mkdir(parents=True, exist_ok=True)
-                shutil.move(temp_path, asset_path)
-                logging.info(f"[Assets Download] Season background upgraded for {safe_title_year(item)} Season {season_number}. Filesize: {human_readable_size(downloaded_size)}")
-                if cache_key in tmdb_cache and isinstance(tmdb_cache[cache_key], dict):
-                    update_tmdb_cache(cache_key, tmdb_id, title, year, media_type, bg_average=best.get("vote_average"))
-                else:
-                    with cache_lock:
-                        tmdb_cache[cache_key] = {
-                            "tmdb_id": tmdb_id,
-                            "bg_average": best.get("vote_average")
-                        }
-                        save_cache(tmdb_cache)
-            else:
-                temp_path.unlink(missing_ok=True)
-                logging.info(f"[Assets Download] No season background upgrade needed for {safe_title_year(item)} Season {season_number}")
-        else:
-            logging.warning(f"[Assets Download] Failed to download season background for {safe_title_year(item)} Season {season_number}. Skipping...")
     finally:
         # Clean up temp file if it still exists
         if temp_path.exists():

@@ -114,8 +114,10 @@ def summarize_metadata_completeness(
         metadata, required, ignored_fields, nested_fields
     )
 
+    percent_complete = round((complete / total_items) * 100, 2) if total_items else 0
+
     logging.info(
-        f"[Metadata Summary] {library_name}: {complete}/{total_items} complete, {incomplete} incomplete metadata entries."
+        f"[Metadata Summary] {library_name}: {complete}/{total_items} complete, {incomplete} incomplete metadata entries. ({percent_complete}%)"
     )
     if incomplete_keys:
         logging.debug(f"[Metadata Summary] {library_name}: Incomplete entries: {incomplete_keys}")
@@ -125,6 +127,7 @@ def summarize_metadata_completeness(
         "incomplete": incomplete,
         "incomplete_keys": incomplete_keys,
         "total_items": total_items,
+        "percent_complete": percent_complete,
     }
     
 def human_readable_size(size, decimal_places=2):

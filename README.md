@@ -60,6 +60,12 @@ pip install -r requirements.txt
 Open `config.yml` and fill in the following:
 
 ```yaml
+# Dry run
+dry_run: false
+
+# Logging
+log_level: "INFO"
+
 #Plex server configuration
 plex:
   url: "http://localhost:32400"
@@ -79,18 +85,16 @@ tmdb:
 preferred_libraries:
   - Movies
   - TV Shows
+
+# Metadata & Asset processing
+process_metadata: true
+process_posters: true
+process_season_posters: true
+process_backgrounds: true
 cleanup_orphans: true
 
-# Logging
-log_level: "INFO"
-
-# Threading
-threads:
-  max_workers: 10
-  timeout: 300
-
 # Metadata output
-metadata_path: "/config/metadata/"
+metadata_path: "/path/to/metadata/"
 
 # Asset management
 assets_path: "/path/to/assets"
@@ -101,20 +105,21 @@ poster_selection:
   preferred_height: 3000
   min_width: 1000
   min_height: 1500
-  preferred_vote: 7.0
-  vote_relaxed: 5.0
+  preferred_vote: 5.0
+  vote_relaxed: 3.5
   vote_average_threshold: 5.0
 
-# Network and retry settings
-network:
-  backoff_factor: 1
-  max_retries: 3
-  timeout: 10
-  pool_connections: 100
-  pool_maxsize: 100
+# Background selection preferences
+background_selection:
+  preferred_width: 3840
+  preferred_height: 2160
+  min_width: 1920
+  min_height: 1080
+  preferred_vote: 5.0
+  vote_relaxed: 3.5
+  vote_average_threshold: 5.0
 
-# Dry run
-dry_run: false
+
 ```
 
 #### 🔑 **How to Get Your Plex Token**

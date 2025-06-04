@@ -26,8 +26,14 @@ def get_best_poster(
         logging.debug("[Assets Selection] No images available to select the best poster.")
         return None
 
-    fallback = fallback or []
+    # Ensure fallback is always a list
+    if fallback is None:
+        fallback = config["tmdb"].get("fallback", [])
+    if isinstance(fallback, str):
+        fallback = [fallback]
     language_priority = [preferred_language] + fallback
+
+    logging.debug(f"[Assets Selection] Language priority for posters: {language_priority}")
 
     # Use config defaults if not provided
     poster_sel = config["poster_selection"]
@@ -41,11 +47,13 @@ def get_best_poster(
     # Filter images by language priority
     for lang in language_priority:
         language_filtered = [img for img in images if img.get("iso_639_1") == lang]
+        logging.debug(f"[Assets Selection] Found {len(language_filtered)} posters for language '{lang}'")
         if language_filtered:
             images_to_consider = language_filtered
             break
     else:
         images_to_consider = images
+        logging.debug(f"[Assets Selection] No posters found for preferred or fallback languages, considering all posters.")
 
     # High quality filter
     filtered = [
@@ -71,10 +79,24 @@ def get_best_poster(
         logging.debug(f"[Assets Selection] Selected fallback poster: {best}")
         return best
 
-    # Fallback: any poster
-    best = max(images_to_consider, key=lambda x: (x["vote_average"], x["width"] * x["height"]))
-    logging.debug(f"[Assets Selection] Selected any available poster as final fallback: {best}")
-    return best
+    # Fallback: poster with minimum width/height
+    filtered = [
+        img for img in images_to_consider
+        if img.get("width", 0) >= min_width and img.get("height", 0) >= min_height
+    ]
+    if filtered:
+        best = max(filtered, key=lambda x: x["width"] * x["height"])
+        logging.debug(f"[Assets Selection] Selected poster meeting minimum size as fallback: {best}")
+        return best
+
+    # Fallback: poster with the largest width and height
+    if images_to_consider:
+        best = max(images_to_consider, key=lambda x: x["width"] * x["height"])
+        logging.debug(f"[Assets Selection] Selected poster meeting largest size as final fallback: {best}")
+        return best
+    else:
+        logging.warning("[Assets Selection] No posters available at all after all filters.")
+        return None
 
 def get_best_background(
     images,
@@ -129,42 +151,6 @@ def get_best_background(
     logging.debug(f"[Assets Selection] Selected any available background as final fallback: {best}")
     return best
 
-def download_poster(image_path, save_path, item=None):
-    """
-    Download a poster image from TMDb and save it to the specified path.
-    """
-    try:
-        url = f"https://image.tmdb.org/t/p/original{image_path}"
-        logging.debug(f"[Assets Download] Downloading {safe_title_year(item)} poster from URL: {url}")
-
-        # Skip download if file already exists and not in dry run mode
-        if save_path.exists() and not config.get("dry_run", False):
-            logging.info(f"[Assets Download] Poster {safe_title_year(item)} already exists. Skipping download.")
-            return True
-
-        # Dry run mode: simulate download
-        if config.get("dry_run", False):
-            logging.info(f"[Assets Dry Run] Would download {safe_title_year(item)} from {url}")
-            return True 
-
-        from helper.tmdb import safe_get_with_retries 
-        response = safe_get_with_retries(url)
-        if not response or response.status_code != 200:
-            logging.warning(f"[Assets Download] Failed to download image for {safe_title_year(item)}")
-            return False
-
-        try:
-            save_poster(response.content, save_path, item)
-            logging.debug(f"[Assets Download] Downloaded poster for {safe_title_year(item)}")
-            return True
-        except Exception as e:
-            logging.warning(f"[Assets Download] Failed to save poster for {safe_title_year(item)}: {e}")
-            return False
-
-    except Exception as e:
-        logging.warning(f"[Assets Download] Failed to process poster download for {safe_title_year(item)}: {e}")
-        return False
-
 def should_upgrade(asset_path, new_image_data, new_image_path=None, cache_key=None, item=None, season_number=None):
     from PIL import Image
     """
@@ -187,7 +173,7 @@ def should_upgrade(asset_path, new_image_data, new_image_path=None, cache_key=No
             cached_votes = cached.get("vote_average", 0)
 
     # Only upgrade if new vote_average is higher than cached,
-    # or if there is no cached value and new_votes meets threshold
+    # Or if there is no cached value and new_votes meets threshold
     if new_votes > cached_votes:
         logging.debug(f"[Assets Recommendation] {label} upgraded based on vote average: {new_votes} (Cached: {cached_votes}, Threshold: {vote_threshold})")
         return not config.get("dry_run", False)
@@ -233,7 +219,8 @@ def generate_temp_path(library_name, extension="jpg"):
     temp_filename = f"temp_{uuid.uuid4().hex}.{extension}"
     return temp_dir / temp_filename
 
-def save_poster(image_content, save_path, item=None):
+async def save_poster(image_content, save_path, item=None):
+    import asyncio
     """
     Save poster image content to disk, avoiding unnecessary overwrites.
     """
@@ -257,8 +244,9 @@ def save_poster(image_content, save_path, item=None):
 
         save_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with open(save_path, "wb") as f:
-            f.write(image_content)
+        # Use async file write for compatibility with async context
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, save_path.write_bytes, image_content)
 
         logging.debug(f"[Assets Save] Poster saved successfully for {safe_title_year(item)}")
 

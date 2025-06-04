@@ -28,15 +28,10 @@ DEFAULT_CONFIG = {
     "preferred_libraries": [
         "Movies", "TV Shows"
     ],
-    "threads": {
-        "max_workers": 50,
-        "timeout": 300
-    },
     "process_metadata": True,
-    "process_assets": True,
+    "process_posters": True,
     "process_season_posters": True,
     "process_backgrounds": True,
-    "process_season_backgrounds": True,
     "cleanup": {"run_by_default": True, "skip_by_default": False},
     "cleanup_orphans": True,
     "metadata_path": "metadata",

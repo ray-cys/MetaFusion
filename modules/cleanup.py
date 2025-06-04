@@ -1,20 +1,19 @@
 import logging
 from pathlib import Path
 from helper.config import load_config
-from helper.tmdb import tmdb_cache, save_cache
+from helper.tmdb import tmdb_cache
+from helper.cache import save_cache
 from helper.plex import get_plex_movie_directory, get_plex_show_directory
 
 config = load_config()
 
-def cleanup_orphans(plex, libraries=None, asset_path=None, existing_assets=None,):
+async def cleanup_orphans(plex, libraries=None, asset_path=None, existing_assets=None):
     from ruamel.yaml import YAML
-    """
-    Cleans up orphaned metadata entries and asset files.
-    """
+    import asyncio
+
     logging.info("[Cleanup] Starting orphan cleanup...")
 
-    # Create shared caches for this cleanup run
-    movie_cache = {} 
+    movie_cache = {}
     episode_cache = {}
 
     orphans_removed = 0
@@ -34,7 +33,6 @@ def cleanup_orphans(plex, libraries=None, asset_path=None, existing_assets=None,
             title = getattr(item, "title", None)
             year = getattr(item, "year", None)
             if title and year:
-                # Add all possible prefixes for TV
                 if media_type in ["show", "tv"]:
                     global_valid_cache_keys.add(f"tv:{title}:{year}")
                     if hasattr(item, "seasons"):
@@ -45,7 +43,7 @@ def cleanup_orphans(plex, libraries=None, asset_path=None, existing_assets=None,
                     global_valid_cache_keys.add(f"movie:{title}:{year}")
                 global_existing_titles.add(f"{title} ({year})")
 
-    # Metadata Orphan Cleanup (TMDb cache)
+    # Metadata orphan cleanup (TMDb cache)
     cache_keys_to_remove = [key for key in list(tmdb_cache.keys()) if key not in global_valid_cache_keys]
     for key in cache_keys_to_remove:
         del tmdb_cache[key]
@@ -53,7 +51,7 @@ def cleanup_orphans(plex, libraries=None, asset_path=None, existing_assets=None,
         logging.info(f"[Cleanup] Removed orphaned cache entry: {key}")
     save_cache(tmdb_cache)
 
-    # YAML Metadata Cleanup
+    # YAML metadata cleanup
     preferred_libraries = config.get("preferred_libraries", ["Movies", "TV Shows"])
     preferred_filenames = {
         f"{lib.lower().replace(' ', '_')}.yml" for lib in preferred_libraries
@@ -73,6 +71,7 @@ def cleanup_orphans(plex, libraries=None, asset_path=None, existing_assets=None,
             orphans_in_file = len(metadata_entries) - len(cleaned_metadata)
             orphans_removed += orphans_in_file
 
+            # Only write if orphans were actually removed
             if orphans_in_file > 0:
                 metadata_content["metadata"] = cleaned_metadata
                 with open(metadata_file, "w", encoding="utf-8") as f:
@@ -84,53 +83,52 @@ def cleanup_orphans(plex, libraries=None, asset_path=None, existing_assets=None,
         except Exception as e:
             logging.error(f"[Cleanup] Failed processing {metadata_file}: {e}")
 
-    # Asset Orphan Cleanup
+    # Asset orphan cleanup (parallelized)
     if asset_path:
-        # Build set of valid asset directories from Plex
         valid_asset_dirs = set()
         for section in plex_sections:
             media_type = section.TYPE if hasattr(section, "TYPE") else section.type
             for item in section.all():
                 if media_type in ["movie"]:
-                    dir_name = get_plex_movie_directory(item, _movie_cache=movie_cache)
+                    dir_name = await get_plex_movie_directory(item, _movie_cache=movie_cache)
                     if dir_name:
                         valid_asset_dirs.add(dir_name)
                 elif media_type in ["show", "tv"]:
-                    dir_name = get_plex_show_directory(item, _episode_cache=episode_cache)
+                    dir_name = await get_plex_show_directory(item, _episode_cache=episode_cache)
                     if dir_name:
                         valid_asset_dirs.add(dir_name)
 
-        def remove_orphaned_files(pattern, description):
-            """
-            Remove orphaned asset files matching a pattern.
-            """
+        async def remove_orphaned_file(path, description):
             nonlocal orphans_removed
-            for path in Path(asset_path).rglob(pattern):
-                resolved_path = str(path.resolve())
-                # Check if this asset's parent directory matches a valid Plex directory
-                parent_dir = path.parent.name
-                if parent_dir in valid_asset_dirs:
-                    continue  # This asset is still in use by Plex
-                if existing_assets is not None and resolved_path in existing_assets:
-                    logging.info(f"[Library Cleanup] Skipping in-use {description}: {path}")
-                    continue
-                action_msg = "[Dry Run] Would remove" if config.get("dry_run", False) else "Removing"
-                logging.info(f"[Library Cleanup] {action_msg} orphaned {description}: {path}")
-                if not config.get("dry_run", False):
-                    try:
-                        path.unlink()
-                        orphans_removed += 1
-                        # Remove empty parent directory if needed
-                        if not any(path.parent.iterdir()):
-                            parent_action_msg = "[Dry Run] Would remove" if config.get("dry_run", False) else "Removing"
-                            logging.info(f"[Library Cleanup] {parent_action_msg} empty directory: {path.parent}")
-                            path.parent.rmdir()
-                    except Exception as e:
-                        logging.warning(f"[Library Cleanup] Failed to remove orphaned {description} {path}: {e}")
+            resolved_path = str(path.resolve())
+            parent_dir = path.parent.name
+            if parent_dir in valid_asset_dirs:
+                return
+            if existing_assets is not None and resolved_path in existing_assets:
+                logging.info(f"[Library Cleanup] Skipping in-use {description}: {path}")
+                return
+            action_msg = "[Dry Run] Would remove" if config.get("dry_run", False) else "Removing"
+            logging.info(f"[Library Cleanup] {action_msg} orphaned {description}: {path}")
+            if not config.get("dry_run", False):
+                try:
+                    await asyncio.to_thread(path.unlink)
+                    orphans_removed += 1
+                    # Remove empty parent directory if needed
+                    if not any(path.parent.iterdir()):
+                        parent_action_msg = "[Dry Run] Would remove" if config.get("dry_run", False) else "Removing"
+                        logging.info(f"[Library Cleanup] {parent_action_msg} empty directory: {path.parent}")
+                        await asyncio.to_thread(path.parent.rmdir)
+                except Exception as e:
+                    logging.warning(f"[Library Cleanup] Failed to remove orphaned {description} {path}: {e}")
 
-        # Remove orphaned poster and season poster files
-        remove_orphaned_files("poster.jpg", "poster")
-        remove_orphaned_files("Season*.jpg", "season poster")
+        # Gather all orphaned files to remove
+        orphaned_posters = [p for p in Path(asset_path).rglob("poster.jpg")]
+        orphaned_season_posters = [p for p in Path(asset_path).rglob("Season*.jpg")]
+
+        await asyncio.gather(
+            *(remove_orphaned_file(p, "poster") for p in orphaned_posters),
+            *(remove_orphaned_file(p, "season poster") for p in orphaned_season_posters),
+        )
         logging.info(f"[Library Cleanup] Asset orphan cleanup complete.")
 
     logging.info(f"[Cleanup] Total orphans removed: {orphans_removed}")

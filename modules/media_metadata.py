@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from helper.tmdb import (
     tmdb_api_request, resolve_tmdb_id, update_tmdb_cache, tmdb_response_cache
 )
@@ -35,7 +36,7 @@ def smart_update_needed(existing_metadata, new_metadata):
                 changed_fields.append(key)
     return changed_fields
 
-def build_movie_metadata(plex_item, consolidated_metadata, dry_run=False, existing_yaml_data=None):
+async def build_movie_metadata(plex_item, consolidated_metadata, dry_run=False, existing_yaml_data=None):
     import pycountry
     """
     Build and consolidate metadata for a movie Plex item using TMDb data.
@@ -44,20 +45,20 @@ def build_movie_metadata(plex_item, consolidated_metadata, dry_run=False, existi
     year = getattr(plex_item, "year", "Unknown")
     full_title = f"{title} ({year})"
     # Try to resolve TMDb ID for the movie
-    tmdb_id = resolve_tmdb_id(plex_item, title, year, "movie")
+    tmdb_id = await resolve_tmdb_id(plex_item, title, year, "movie")
     imdb_id_for_mapping = ""
     mapping_id = ""
 
     # If no TMDb ID, try searching by title
     if not tmdb_id:
-        search_results = tmdb_api_request(
+        search_results = await tmdb_api_request(
             "search/movie",
             params={"query": title}
         )
         if search_results and search_results.get("results"):
             movie_id = search_results["results"][0].get("id")
             if movie_id:
-                external_ids = tmdb_api_request(f"movie/{movie_id}/external_ids")
+                external_ids = await tmdb_api_request(f"movie/{movie_id}/external_ids")
                 if external_ids:
                     imdb_id_for_mapping = external_ids.get("imdb_id", "")
         mapping_id = imdb_id_for_mapping or ""
@@ -71,7 +72,7 @@ def build_movie_metadata(plex_item, consolidated_metadata, dry_run=False, existi
     details_key = f"movie/{tmdb_id}"
     details = tmdb_response_cache.get(details_key)
     if not details:
-        details = tmdb_api_request(
+        details = await tmdb_api_request(
             details_key,
             params={
                 "append_to_response": "credits,release_dates",
@@ -150,7 +151,7 @@ def build_movie_metadata(plex_item, consolidated_metadata, dry_run=False, existi
         "studio", "tagline", "summary", "country", "genre", "cast", "director", "writer", "producer"
     ]
     # Log completeness of metadata
-    percent = log_metadata_completeness("[Movie Metadata]", full_title, new_metadata, movie_expected_fields)
+    percent = log_metadata_completeness("Movie Metadata", full_title, new_metadata, movie_expected_fields)
 
     # Smart update: check if anything changed
     if existing_yaml_data:
@@ -185,9 +186,8 @@ def build_movie_metadata(plex_item, consolidated_metadata, dry_run=False, existi
     logging.debug(f"[Metadata] Movie metadata built and saved for {full_title} using TMDb ID {tmdb_id}.")
     return percent
 
-def build_tv_metadata(plex_item, consolidated_metadata, dry_run=False, existing_yaml_data=None, season_cache=None, episode_cache=None):
+async def build_tv_metadata(plex_item, consolidated_metadata, dry_run=False, existing_yaml_data=None, season_cache=None, episode_cache=None):
     import pycountry
-    from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
     """
     Build and consolidate metadata for a TV show Plex item using TMDb data.
     """
@@ -195,7 +195,7 @@ def build_tv_metadata(plex_item, consolidated_metadata, dry_run=False, existing_
     year = getattr(plex_item, "year", "Unknown")
     full_title = f"{title} ({year})"
     # Try to resolve TMDb ID for the TV show
-    tmdb_id = resolve_tmdb_id(plex_item, title, year, "tv")
+    tmdb_id = await resolve_tmdb_id(plex_item, title, year, "tv")
 
     if not tmdb_id:
         logging.warning(f"[Metadata] No TMDb ID found for {full_title}. Skipping...")
@@ -211,7 +211,7 @@ def build_tv_metadata(plex_item, consolidated_metadata, dry_run=False, existing_
     details_key = f"tv/{tmdb_id_int}"
     details = tmdb_response_cache.get(details_key)
     if not details:
-        details = tmdb_api_request(
+        details = await tmdb_api_request(
             details_key,
             params={
                 "append_to_response": "credits,keywords,content_ratings,external_ids",
@@ -255,14 +255,14 @@ def build_tv_metadata(plex_item, consolidated_metadata, dry_run=False, existing_
     }
 
     # Get existing seasons/episodes from Plex
-    existing_seasons_episodes = get_existing_plex_seasons_episodes(
+    existing_seasons_episodes = await get_existing_plex_seasons_episodes(
         plex_item,
         _season_cache=season_cache,
         _episode_cache=episode_cache
     )
     seasons_data = {}
 
-    def process_season(season_info):
+    async def process_season(season_info):
         """
         Process metadata for a single season, including all episodes.
         """
@@ -273,7 +273,7 @@ def build_tv_metadata(plex_item, consolidated_metadata, dry_run=False, existing_
         season_key = f"tv/{tmdb_id_int}/season/{season_number}"
         season_details = tmdb_response_cache.get(season_key)
         if not season_details:
-            season_details = tmdb_api_request(season_key)
+            season_details = await tmdb_api_request(season_key)
             if season_details:
                 tmdb_response_cache[season_key] = season_details
             else:
@@ -327,21 +327,12 @@ def build_tv_metadata(plex_item, consolidated_metadata, dry_run=False, existing_
             "episodes": episodes,
         }
     
-    # Use ThreadPoolExecutor to process seasons in parallel
-    max_workers = config.get("threads", {}).get("max_workers", 5)
-    timeout_seconds = config.get("threads", {}).get("timeout", 300)
-
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        season_futures = {executor.submit(process_season, s): s for s in details.get("seasons", [])}
-        try:
-            for future in as_completed(season_futures, timeout=timeout_seconds):
-                season_number, season_data = future.result()
-                if season_data:
-                    seasons_data[season_number] = season_data
-        except TimeoutError:
-            logging.error(f"[Metadata Timeout] Season processing exceeded {timeout_seconds} seconds.")
-        except Exception as e:
-            logging.error(f"[Metadata Error] Season processing exception: {e}")
+    # Use asyncio.gather to process seasons concurrently
+    season_infos = details.get("seasons", [])
+    results = await asyncio.gather(*(process_season(s) for s in season_infos))
+    for season_number, season_data in results:
+        if season_data:
+            seasons_data[season_number] = season_data
 
     # Fetch external IDs for mapping
     external_ids = details.get("external_ids", {})
@@ -384,7 +375,7 @@ def build_tv_metadata(plex_item, consolidated_metadata, dry_run=False, existing_
 
     grand_expected_fields = list(grand_metadata.keys())
     grand_percent = log_metadata_completeness(
-        "[TV Show Metadata]", full_title, grand_metadata, grand_expected_fields
+        "TV Show Metadata", full_title, grand_metadata, grand_expected_fields
     )
 
     # Smart update: check if anything changed
