@@ -59,11 +59,11 @@ tmdb_response_cache = {}
 # Set up a requests session with retry and connection pooling
 tmdb_session = requests.Session()
 adapter = HTTPAdapter(
-    pool_connections=config["network"].get("pool_connections", 100),
-    pool_maxsize=config["network"].get("pool_maxsize", 100),
+    pool_connections=100,
+    pool_maxsize=100,
     max_retries=Retry(
-        total=config["network"].get("max_retries", 3),
-        backoff_factor=config["network"].get("backoff_factor", 1),
+        total=3,
+        backoff_factor=1,
         status_forcelist=[500, 502, 503, 504]
     )
 )
@@ -71,23 +71,30 @@ tmdb_session.mount("http://", adapter)
 tmdb_session.mount("https://", adapter)
 
 def safe_get_with_retries(url, params=None, retries=None, backoff_factor=None, cache=True, **kwargs):
+    import hashlib
     """
     Make a GET request with retries and optional in-memory response caching.
     """
-    backoff = backoff_factor if backoff_factor is not None else config["network"].get("backoff_factor", 1)
-    max_retries = retries if retries is not None else config["network"].get("max_retries", 3)
-    timeout = config["network"].get("timeout", 10)
-    cache_key = f"{url}:{orjson.dumps(params or {}, option=orjson.OPT_SORT_KEYS).decode()}"
-    if cache and cache_key in tmdb_response_cache:
-        logging.debug(f"[API Cache] Returning cached response for URL: {url}")
-        return tmdb_response_cache[cache_key]
+    # Create a unique cache key based on URL and params
+    params_bytes = orjson.dumps(params or {}, option=orjson.OPT_SORT_KEYS)
+    cache_key = f"{url}:{params_bytes.decode()}"
+    cache_hash = hashlib.sha256(cache_key.encode()).hexdigest()
+
+    # Check in-memory cache first
+    if cache and cache_hash in tmdb_response_cache:
+        logging.debug(f"[API Cache] Returning cached response for URL: {url} params: {params}")
+        return tmdb_response_cache[cache_hash]
+
+    backoff = backoff_factor if backoff_factor is not None else 1
+    max_retries = retries if retries is not None else 3
+    timeout = 10
 
     for attempt in range(1, max_retries + 1):
         try:
             response = tmdb_session.get(url, params=params, timeout=timeout, **kwargs)
             if response.ok:
                 if cache:
-                    tmdb_response_cache[cache_key] = response
+                    tmdb_response_cache[cache_hash] = response
                 return response
             logging.warning(f"[API Cache] Attempt {attempt}: Status {response.status_code} for URL: {url}")
         except Exception as e:
@@ -97,6 +104,7 @@ def safe_get_with_retries(url, params=None, retries=None, backoff_factor=None, c
     return None
 
 def tmdb_api_request(endpoint, params=None, retries=3, delay=2, backoff_factor=2, api_key=None, language=None, region=None):
+    import hashlib
     """
     Make a TMDb API request with retries and exponential backoff.
     """
@@ -118,10 +126,12 @@ def tmdb_api_request(endpoint, params=None, retries=3, delay=2, backoff_factor=2
         params["region"] = region
     query.update(params)
 
+    # Smarter cache key (hash for large params)
     cache_key = f"{url}:{orjson.dumps(query, option=orjson.OPT_SORT_KEYS).decode()}"
-    if cache_key in tmdb_response_cache:
-        logging.debug(f"[TMDb API] Returning in-memory cached response for {url}")
-        return tmdb_response_cache[cache_key]
+    cache_hash = hashlib.sha256(cache_key.encode()).hexdigest()
+    if cache_hash in tmdb_response_cache:
+        logging.debug(f"[TMDb API] Returning in-memory cached response for {url} params: {params}")
+        return tmdb_response_cache[cache_hash]
 
     for attempt in range(1, retries + 1):
         try:
@@ -129,7 +139,7 @@ def tmdb_api_request(endpoint, params=None, retries=3, delay=2, backoff_factor=2
             if response.status_code == 200:
                 data = response.json()
                 if data:
-                    tmdb_response_cache[cache_key] = data
+                    tmdb_response_cache[cache_hash] = data
                     logging.debug(f"[TMDb API Response] URL: {response.url}")
                     return data
                 else:

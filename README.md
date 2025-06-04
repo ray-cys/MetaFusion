@@ -169,11 +169,11 @@ When enabled, the script will:
 Here’s what’s coming next (and how you can help!):
 
 1. **Background Poster Download**  
-   - 🎨 Download TMDb backgrounds for movies and TV shows.
-   - User-configurable width, height, vote average, and language preferences.
+   - 🎨 Download TMDb backgrounds for movies and TV shows. *Done
+   - User-configurable width, height, vote average, and language preferences. *Done
 
 2. **Configurable Asset Types**  
-   - 🖼️ Turn season posters and background downloads on/off via config options.
+   - 🖼️ Turn season posters and background downloads on/off via config options. *Done
 
 3. **Enhanced Episode Metadata**  
    - 🎭 Improved fallbacks to fetch more detailed crew and cast info for episodes.
@@ -186,7 +186,7 @@ Here’s what’s coming next (and how you can help!):
    - Include poster URLs for collections and franchises.
 
 6. **Speed Optimizations**  
-   - ⚡ Further parallelization and smarter caching for even faster runs.
+   - ⚡ Further parallelization and smarter caching for even faster runs. *Done at the best i could
 
 ---
 

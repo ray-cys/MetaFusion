@@ -12,6 +12,8 @@
 
 import sys
 import time
+import cProfile
+import pstats
 from helper.config import load_config
 from helper.logging import setup_logging
 from helper.plex import get_plex_libraries
@@ -28,6 +30,8 @@ if __name__ == "__main__":
     """
     Main entry point for MetaFusion script.
     """
+    profiler = cProfile.Profile()
+    profiler.enable()
     try:
         start_time = time.time()
         library_item_counts = {}
@@ -58,13 +62,17 @@ if __name__ == "__main__":
         metadata_summaries = {}
         library_filesize = {}
 
-        # Process each library
         for lib in libraries:
             library_name = lib.get("title")
             if library_name not in selected_libraries:
                 logger.info(f"[Library Skip] Skipping library: {library_name}")
                 continue
-            # Process metadata and assets for the library
+
+            # Create shared caches for this library
+            movie_cache = {}
+            season_cache = {}
+            episode_cache = {}
+
             process_library(
                 plex=plex,
                 library_name=library_name,
@@ -72,6 +80,9 @@ if __name__ == "__main__":
                 library_item_counts=library_item_counts,
                 metadata_summaries=metadata_summaries,
                 library_filesize=library_filesize,
+                season_cache=season_cache,
+                episode_cache=episode_cache,
+                movie_cache=movie_cache
             )
 
         # Optionally clean up orphaned metadata and assets
@@ -122,3 +133,8 @@ if __name__ == "__main__":
     except Exception as e:
         logger.error(f"[Fatal] Unhandled exception: {e}", exc_info=True)
         sys.exit(1)
+    finally:
+        profiler.disable()
+        stats = pstats.Stats(profiler).sort_stats("cumtime")
+        stats.dump_stats("metafusion.profile")
+        stats.print_stats(40)  # Print top 40 slowest calls

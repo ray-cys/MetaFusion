@@ -79,10 +79,11 @@ def build_movie_metadata(plex_item, consolidated_metadata, dry_run=False, existi
                 "region": config.get("tmdb", {}).get("region", "US")
             }
         )
-        if not details:
+        if details:
+            tmdb_response_cache[details_key] = details
+        else:
             logging.warning(f"[Metadata] No TMDb data found for {full_title}. Skipping...")
             return
-        tmdb_response_cache[details_key] = details
 
     # Extract content rating (US certification)
     content_rating = next(
@@ -146,7 +147,7 @@ def build_movie_metadata(plex_item, consolidated_metadata, dry_run=False, existi
     }
     movie_expected_fields = [
         "sort_title", "original_title", "originally_available", "content_rating", "runtime",
-        "studio", "tagline", "summary", "country", "genre", "cast", "director", "writer", "producer", "collection"
+        "studio", "tagline", "summary", "country", "genre", "cast", "director", "writer", "producer"
     ]
     # Log completeness of metadata
     percent = log_metadata_completeness("[Movie Metadata]", full_title, new_metadata, movie_expected_fields)
@@ -184,7 +185,7 @@ def build_movie_metadata(plex_item, consolidated_metadata, dry_run=False, existi
     logging.debug(f"[Metadata] Movie metadata built and saved for {full_title} using TMDb ID {tmdb_id}.")
     return percent
 
-def build_tv_metadata(plex_item, consolidated_metadata, dry_run=False, existing_yaml_data=None):
+def build_tv_metadata(plex_item, consolidated_metadata, dry_run=False, existing_yaml_data=None, season_cache=None, episode_cache=None):
     import pycountry
     from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
     """
@@ -218,10 +219,11 @@ def build_tv_metadata(plex_item, consolidated_metadata, dry_run=False, existing_
                 "region": config.get("tmdb", {}).get("region", "US")
             }
         )
-        if not details:
+        if details:
+            tmdb_response_cache[details_key] = details
+        else:
             logging.warning(f"[Metadata] No TMDb data found for {full_title}. Skipping...")
             return
-        tmdb_response_cache[details_key] = details
 
     # Extract genres, studios, countries, etc.
     content_rating = next(
@@ -253,7 +255,11 @@ def build_tv_metadata(plex_item, consolidated_metadata, dry_run=False, existing_
     }
 
     # Get existing seasons/episodes from Plex
-    existing_seasons_episodes = get_existing_plex_seasons_episodes(plex_item)
+    existing_seasons_episodes = get_existing_plex_seasons_episodes(
+        plex_item,
+        _season_cache=season_cache,
+        _episode_cache=episode_cache
+    )
     seasons_data = {}
 
     def process_season(season_info):
@@ -268,10 +274,11 @@ def build_tv_metadata(plex_item, consolidated_metadata, dry_run=False, existing_
         season_details = tmdb_response_cache.get(season_key)
         if not season_details:
             season_details = tmdb_api_request(season_key)
-            if not season_details:
+            if season_details:
+                tmdb_response_cache[season_key] = season_details
+            else:
                 logging.warning(f"[Metadata] No TMDb data found for Season {season_number} of {full_title}. Skipping...")
                 return season_number, None
-            tmdb_response_cache[season_key] = season_details
 
         # Extract show-level and season-level credits once
         show_crew = details.get("credits", {}).get("crew", []) or []

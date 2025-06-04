@@ -15,15 +15,6 @@ CONFIG_FILE = Path(
 DEFAULT_CONFIG = {
     "dry_run": False,
     "log_level": "INFO",
-    "cleanup": {"run_by_default": True, "skip_by_default": False},
-    "cleanup_orphans": True,
-    "process_metadata": True,
-    "process_assets": True,
-    "process_season_posters": True,
-    "process_backgrounds": True,
-    "process_season_backgrounds": True,
-    "metadata_path": "metadata",
-    "assets_path": "assets",
     "plex": {
         "url": "",
         "token": ""
@@ -34,6 +25,22 @@ DEFAULT_CONFIG = {
         "region": "US",
         "fallback": ["zh", "ja"]
     },
+    "preferred_libraries": [
+        "Movies", "TV Shows"
+    ],
+    "threads": {
+        "max_workers": 50,
+        "timeout": 300
+    },
+    "process_metadata": True,
+    "process_assets": True,
+    "process_season_posters": True,
+    "process_backgrounds": True,
+    "process_season_backgrounds": True,
+    "cleanup": {"run_by_default": True, "skip_by_default": False},
+    "cleanup_orphans": True,
+    "metadata_path": "metadata",
+    "assets_path": "assets",
     "poster_selection": {
         "preferred_width": 2000,
         "preferred_height": 3000,
@@ -51,15 +58,6 @@ DEFAULT_CONFIG = {
         "preferred_vote": 7.0,
         "vote_relaxed": 5.0,
         "vote_average_threshold": 5.0
-    },
-    "preferred_libraries": ["Movies", "TV Shows"],
-    "threads": {"max_workers": 5, "timeout": 300},
-    "network": {
-        "backoff_factor": 1,
-        "max_retries": 3,
-        "timeout": 10,
-        "pool_connections": 100,
-        "pool_maxsize": 100
     },
 }
 

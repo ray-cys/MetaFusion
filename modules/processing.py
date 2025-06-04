@@ -22,6 +22,9 @@ def process_item_metadata_and_assets(
     library_name="Unknown",
     existing_assets=None,
     library_filesize=None,
+    season_cache=None, 
+    episode_cache=None,
+    movie_cache=None
 ):
     from modules.media_metadata import build_movie_metadata, build_tv_metadata
     from modules.media_assets import (
@@ -77,7 +80,7 @@ def process_item_metadata_and_assets(
                 if library_type == "movie":
                     build_movie_metadata(plex_item, consolidated_metadata, dry_run, existing_yaml_data)
                 elif library_type == "tv":
-                    build_tv_metadata(plex_item, consolidated_metadata, dry_run, existing_yaml_data)
+                    build_tv_metadata(plex_item, consolidated_metadata, dry_run, existing_yaml_data, season_cache, episode_cache)
                 else:
                     logging.warning(f"[Metadata] Unsupported library type '{library_type}' for {full_title}. Skipping...")
                     return
@@ -98,15 +101,15 @@ def process_item_metadata_and_assets(
         try:
             with assets_lock:
                 if library_type == "movie":
-                    size = process_poster_for_media("movie", tmdb_id, plex_item, library_name, existing_assets)
+                    size = process_poster_for_media("movie", tmdb_id, plex_item, library_name, existing_assets, episode_cache, movie_cache)
                     total_downloaded += size
                 elif library_type in ["show", "tv"]:
-                    size = process_poster_for_media("tv", tmdb_id, plex_item, library_name, existing_assets)
+                    size = process_poster_for_media("tv", tmdb_id, plex_item, library_name, existing_assets, episode_cache, movie_cache)
                     total_downloaded += size
                     # --- SEASON POSTER SWITCH ---
                     if config.get("process_season_posters", True):
                         for season in getattr(plex_item, "seasons", lambda: [])():
-                            size = process_season_poster(tmdb_id, season.index, plex_item, library_name, existing_assets)
+                            size = process_season_poster(tmdb_id, season.index, plex_item, library_name, existing_assets, episode_cache)
                             total_downloaded += size
         except Exception as e:
             logging.error(f"[Processing Error] Failed to process assets for {full_title}: {e}")
@@ -118,15 +121,15 @@ def process_item_metadata_and_assets(
         try:
             with assets_lock:
                 if library_type == "movie":
-                    size = process_background_for_media("movie", tmdb_id, plex_item, library_name, existing_assets)
+                    size = process_background_for_media("movie", tmdb_id, plex_item, library_name, existing_assets, season_cache, movie_cache)
                     total_downloaded += size
                 elif library_type in ["show", "tv"]:
-                    size = process_background_for_media("tv", tmdb_id, plex_item, library_name, existing_assets)
+                    size = process_background_for_media("tv", tmdb_id, plex_item, library_name, existing_assets, season_cache, movie_cache)
                     total_downloaded += size
                     # Process season background assets (configurable through config)
                     if config.get("process_season_backgrounds", True):
                         for season in getattr(plex_item, "seasons", lambda: [])():
-                            size = process_season_background(tmdb_id, season.index, plex_item, library_name, existing_assets)
+                            size = process_season_background(tmdb_id, season.index, plex_item, library_name, existing_assets, season_cache, movie_cache)
                             total_downloaded += size
         except Exception as e:
             logging.error(f"[Processing Error] Failed to process backgrounds for {full_title}: {e}")
@@ -139,7 +142,17 @@ def process_item_metadata_and_assets(
             
     logging.debug(f"[Processing] Finished processing: {full_title} ({library_type})")
 
-def process_library(plex, library_name, dry_run=False, library_item_counts=None, metadata_summaries=None, library_filesize=None):
+def process_library(
+    plex, 
+    library_name, 
+    dry_run=False, 
+    library_item_counts=None, 
+    metadata_summaries=None, 
+    library_filesize=None, 
+    season_cache=None, 
+    episode_cache=None,
+    movie_cache=None
+    ):
     from ruamel.yaml import YAML
     """
     Process all items in a Plex library, build metadata, download assets, and save to YAML.
@@ -178,6 +191,7 @@ def process_library(plex, library_name, dry_run=False, library_item_counts=None,
                 executor.submit(
                     process_item_metadata_and_assets, item, consolidated_metadata, dry_run,
                     existing_yaml_data, library_item_counts, library_name, existing_assets, library_filesize,
+                    season_cache, episode_cache, movie_cache,
                 ): item for item in items
             }
 
@@ -195,6 +209,7 @@ def process_library(plex, library_name, dry_run=False, library_item_counts=None,
         # Save metadata and caches if not a dry run
         if not dry_run:
             try:
+                output_path.parent.mkdir(parents=True, exist_ok=True)
                 logging.debug(f"[Metadata] Saving metadata to {output_path}...")
                 with open(output_path, "w", encoding="utf-8") as f:
                     yaml = YAML()

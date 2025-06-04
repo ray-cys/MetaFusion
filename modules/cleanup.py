@@ -13,13 +13,17 @@ def cleanup_orphans(plex, libraries=None, asset_path=None, existing_assets=None,
     """
     logging.info("[Cleanup] Starting orphan cleanup...")
 
+    # Create shared caches for this cleanup run
+    movie_cache = {} 
+    episode_cache = {}
+
     orphans_removed = 0
     global_valid_cache_keys = set()
     global_existing_titles = set()
     plex_sections = plex.library.sections()
     selected_libraries = libraries if libraries else [section.title for section in plex_sections]
 
-    # --- Build global valid cache keys and YAML keys for all libraries ---
+    # Build global valid cache keys and YAML keys for all libraries
     for section in plex_sections:
         library_name = section.title
         if library_name not in selected_libraries:
@@ -41,7 +45,7 @@ def cleanup_orphans(plex, libraries=None, asset_path=None, existing_assets=None,
                     global_valid_cache_keys.add(f"movie:{title}:{year}")
                 global_existing_titles.add(f"{title} ({year})")
 
-    # --- Metadata Orphan Cleanup (TMDb cache) ---
+    # Metadata Orphan Cleanup (TMDb cache)
     cache_keys_to_remove = [key for key in list(tmdb_cache.keys()) if key not in global_valid_cache_keys]
     for key in cache_keys_to_remove:
         del tmdb_cache[key]
@@ -49,7 +53,7 @@ def cleanup_orphans(plex, libraries=None, asset_path=None, existing_assets=None,
         logging.info(f"[Cleanup] Removed orphaned cache entry: {key}")
     save_cache(tmdb_cache)
 
-    # --- YAML Metadata Cleanup ---
+    # YAML Metadata Cleanup
     preferred_libraries = config.get("preferred_libraries", ["Movies", "TV Shows"])
     preferred_filenames = {
         f"{lib.lower().replace(' ', '_')}.yml" for lib in preferred_libraries
@@ -80,7 +84,7 @@ def cleanup_orphans(plex, libraries=None, asset_path=None, existing_assets=None,
         except Exception as e:
             logging.error(f"[Cleanup] Failed processing {metadata_file}: {e}")
 
-    # --- Asset Orphan Cleanup ---
+    # Asset Orphan Cleanup
     if asset_path:
         # Build set of valid asset directories from Plex
         valid_asset_dirs = set()
@@ -88,11 +92,11 @@ def cleanup_orphans(plex, libraries=None, asset_path=None, existing_assets=None,
             media_type = section.TYPE if hasattr(section, "TYPE") else section.type
             for item in section.all():
                 if media_type in ["movie"]:
-                    dir_name = get_plex_movie_directory(item)
+                    dir_name = get_plex_movie_directory(item, _movie_cache=movie_cache)
                     if dir_name:
                         valid_asset_dirs.add(dir_name)
                 elif media_type in ["show", "tv"]:
-                    dir_name = get_plex_show_directory(item)
+                    dir_name = get_plex_show_directory(item, _episode_cache=episode_cache)
                     if dir_name:
                         valid_asset_dirs.add(dir_name)
 
