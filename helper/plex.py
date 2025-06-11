@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from pathlib import Path
 
@@ -16,7 +17,6 @@ def get_plex_libraries(plex):
         return []
 
 async def get_existing_plex_seasons_episodes(plex_item, _season_cache=None, _episode_cache=None):
-    import asyncio
     """
     Get a mapping of seasons to episode numbers for a given Plex TV show item.
     Uses in-memory cache to avoid repeated API calls for the same item.
@@ -47,7 +47,6 @@ async def get_existing_plex_seasons_episodes(plex_item, _season_cache=None, _epi
     return seasons_episodes
 
 async def get_plex_movie_directory(item, _movie_cache=None):
-    import asyncio
     """
     Get the directory name containing the movie file for a Plex movie item.
     Uses in-memory cache to avoid repeated API calls for the same item.
@@ -71,7 +70,6 @@ async def get_plex_movie_directory(item, _movie_cache=None):
     return f"{getattr(item, 'title', 'Unknown')} ({getattr(item, 'year', 'Unknown')})"
 
 async def get_plex_show_directory(item, _episode_cache=None):
-    import asyncio
     """
     Get the directory name containing the show files for a Plex TV show item.
     Uses in-memory cache to avoid repeated API calls for the same item.

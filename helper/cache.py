@@ -7,7 +7,7 @@ if os.environ.get("DOCKER_ENV", "0") == "1":
 else:
     CACHE_PATH = Path(__file__).parent.parent / "cache"
 CACHE_PATH.mkdir(exist_ok=True)
-CACHE_FILE = CACHE_PATH / "tmdb_cache.json"
+CACHE_FILE = CACHE_PATH / "meta_cache.json"
 FAILED_CACHE_FILE = CACHE_PATH / "failed_items.json"
 
 def load_cache():

@@ -1,7 +1,7 @@
 import logging
 import asyncio
 from helper.tmdb import (
-    tmdb_api_request, resolve_tmdb_id, update_tmdb_cache, tmdb_response_cache
+    tmdb_api_request, resolve_tmdb_id, update_meta_cache, tmdb_response_cache
 )
 from helper.plex import get_existing_plex_seasons_episodes
 from helper.stats import log_metadata_completeness
@@ -36,16 +36,26 @@ def smart_update_needed(existing_metadata, new_metadata):
                 changed_fields.append(key)
     return changed_fields
 
-async def build_movie_metadata(plex_item, consolidated_metadata, dry_run=False, existing_yaml_data=None):
+async def build_movie_metadata(
+    plex_item,
+    consolidated_metadata,
+    dry_run=False,
+    run_upgrade=True,
+    existing_yaml_data=None,
+    session=None,
+    ignored_fields=None
+):
     import pycountry
     """
     Build and consolidate metadata for a movie Plex item using TMDb data.
     """
+    if ignored_fields is None:
+        ignored_fields = set()
     title = getattr(plex_item, "title", "Unknown")
     year = getattr(plex_item, "year", "Unknown")
     full_title = f"{title} ({year})"
     # Try to resolve TMDb ID for the movie
-    tmdb_id = await resolve_tmdb_id(plex_item, title, year, "movie")
+    tmdb_id = await resolve_tmdb_id(plex_item, title, year, "movie", session=session)
     imdb_id_for_mapping = ""
     mapping_id = ""
 
@@ -53,7 +63,8 @@ async def build_movie_metadata(plex_item, consolidated_metadata, dry_run=False, 
     if not tmdb_id:
         search_results = await tmdb_api_request(
             "search/movie",
-            params={"query": title}
+            params={"query": title},
+            session=session
         )
         if search_results and search_results.get("results"):
             movie_id = search_results["results"][0].get("id")
@@ -78,7 +89,8 @@ async def build_movie_metadata(plex_item, consolidated_metadata, dry_run=False, 
                 "append_to_response": "credits,release_dates",
                 "language": config.get("tmdb", {}).get("language", "en"),
                 "region": config.get("tmdb", {}).get("region", "US")
-            }
+            },
+            session=session
         )
         if details:
             tmdb_response_cache[details_key] = details
@@ -128,8 +140,17 @@ async def build_movie_metadata(plex_item, consolidated_metadata, dry_run=False, 
     producers = [m.get("name", "") for m in crew if m.get("job") in producer_jobs]
     top_cast = [c.get("name", "") for c in cast[:10]]
 
+    basic_fields = [
+        "sort_title", "original_title", "originally_available", "content_rating",
+        "studio", "runtime", "tagline", "summary", "country", "genre"
+    ]
+    enhanced_fields = [
+        "cast", "director", "writer", "producer", "collection"
+    ]
+    fields_to_write = basic_fields + (enhanced_fields if config.get("enhanced_metadata", True) else [])
+
     # Build new metadata dictionary
-    new_metadata = {
+    new_metadata = {k: v for k, v in {
         "sort_title": title,
         "original_title": details.get("original_title", title),
         "originally_available": originally_available,
@@ -145,25 +166,41 @@ async def build_movie_metadata(plex_item, consolidated_metadata, dry_run=False, 
         "writer": writers or [],
         "producer": producers or [],
         "collection": collection,
-    }
-    movie_expected_fields = [
-        "sort_title", "original_title", "originally_available", "content_rating", "runtime",
-        "studio", "tagline", "summary", "country", "genre", "cast", "director", "writer", "producer"
-    ]
+    }.items() if k in fields_to_write}
+
     # Log completeness of metadata
-    percent = log_metadata_completeness("Movie Metadata", full_title, new_metadata, movie_expected_fields)
+    expected_fields = [f for f in fields_to_write if f != "collection"]
+    percent = log_metadata_completeness("Movie Metadata", full_title, new_metadata, expected_fields, extra="", ignored_fields=ignored_fields)
 
     # Smart update: check if anything changed
+    if not run_upgrade:
+        if existing_yaml_data:
+            existing_metadata = existing_yaml_data.get("metadata", {}).get(full_title, {})
+            missing_fields = {k: v for k, v in new_metadata.items() if not existing_metadata.get(k)}
+            if not missing_fields:
+                logging.info(f"[Metadata] Skipping {full_title} ({percent}%) [Scheduled upgrades not running].")
+                return percent
+            changes = smart_update_needed(existing_metadata, missing_fields)
+            if not changes:
+                logging.info(f"[Metadata] No changes for {full_title} ({percent}%). Preserving existing metadata.")
+                consolidated_metadata["metadata"][full_title] = existing_metadata
+                return percent
+            else:
+                logging.info(f"[Metadata] Fields changed for {full_title} ({percent}%): {changes}")
+                existing_metadata.update(missing_fields)
+                consolidated_metadata["metadata"][full_title] = {**metadata_entry, **existing_metadata}
+                return percent
+
     if existing_yaml_data:
         existing_metadata = existing_yaml_data.get("metadata", {}).get(full_title, {})
         changes = smart_update_needed(existing_metadata, new_metadata)
         if not changes:
-            logging.debug(f"[Metadata Update] No changes for {full_title}. Preserving existing metadata.")
+            logging.info(f"[Metadata] No changes for {full_title} ({percent}%). Preserving existing metadata.")
             consolidated_metadata["metadata"][full_title] = existing_metadata
-            return
+            return percent
         else:
-            logging.debug(f"[Metadata Update] Fields changed for {full_title}: {changes}")
-    
+            logging.info(f"[Metadata] Fields changed for {full_title} ({percent}%). Updating metadata.")
+
     metadata_entry = {
         "match": {
             "title": title,
@@ -179,14 +216,24 @@ async def build_movie_metadata(plex_item, consolidated_metadata, dry_run=False, 
 
     # Save metadata and update cache
     consolidated_metadata["metadata"][full_title] = metadata_entry
-    
+
     # Use standardized cache key format
     cache_key = f"movie:{title}:{year}"
-    update_tmdb_cache(cache_key, tmdb_id, title, year, "movie")
-    logging.debug(f"[Metadata] Movie metadata built and saved for {full_title} using TMDb ID {tmdb_id}.")
+    update_meta_cache(cache_key, tmdb_id, title, year, "movie")
+    logging.info(f"[Metadata] Movie metadata built and saved for {full_title} ({percent}%) using TMDb ID {tmdb_id}.")
     return percent
 
-async def build_tv_metadata(plex_item, consolidated_metadata, dry_run=False, existing_yaml_data=None, season_cache=None, episode_cache=None):
+async def build_tv_metadata(
+    plex_item,
+    consolidated_metadata,
+    dry_run=False,
+    run_upgrade=True,
+    existing_yaml_data=None,
+    season_cache=None,
+    episode_cache=None,
+    session=None,
+    ignored_fields=None
+):
     import pycountry
     """
     Build and consolidate metadata for a TV show Plex item using TMDb data.
@@ -194,8 +241,7 @@ async def build_tv_metadata(plex_item, consolidated_metadata, dry_run=False, exi
     title = getattr(plex_item, "title", "Unknown")
     year = getattr(plex_item, "year", "Unknown")
     full_title = f"{title} ({year})"
-    # Try to resolve TMDb ID for the TV show
-    tmdb_id = await resolve_tmdb_id(plex_item, title, year, "tv")
+    tmdb_id = await resolve_tmdb_id(plex_item, title, year, "tv", session=session)
 
     if not tmdb_id:
         logging.warning(f"[Metadata] No TMDb ID found for {full_title}. Skipping...")
@@ -207,7 +253,6 @@ async def build_tv_metadata(plex_item, consolidated_metadata, dry_run=False, exi
         logging.warning(f"[Metadata] Invalid TMDb ID format for {full_title}. Skipping...")
         return
 
-    # Try to get show details from cache, else fetch from TMDb
     details_key = f"tv/{tmdb_id_int}"
     details = tmdb_response_cache.get(details_key)
     if not details:
@@ -217,7 +262,8 @@ async def build_tv_metadata(plex_item, consolidated_metadata, dry_run=False, exi
                 "append_to_response": "credits,keywords,content_ratings,external_ids",
                 "language": config.get("tmdb", {}).get("language", "en"),
                 "region": config.get("tmdb", {}).get("region", "US")
-            }
+            },
+            session=session
         )
         if details:
             tmdb_response_cache[details_key] = details
@@ -225,7 +271,6 @@ async def build_tv_metadata(plex_item, consolidated_metadata, dry_run=False, exi
             logging.warning(f"[Metadata] No TMDb data found for {full_title}. Skipping...")
             return
 
-    # Extract genres, studios, countries, etc.
     content_rating = next(
         (c.get("rating", "") for c in details.get("content_ratings", {}).get("results", [])
         if c.get("iso_3166_1") == "US"), ""
@@ -234,15 +279,20 @@ async def build_tv_metadata(plex_item, consolidated_metadata, dry_run=False, exi
     studios = [n.get("name", "") for n in details.get("networks", []) if n.get("name")]
     studio = ", ".join(studios) if studios else ""
     originally_available = details.get("first_air_date", "") or ""
-
     country_codes = details.get("origin_country", [])
     countries = [
         getattr(pycountry.countries.get(alpha_2=code), "official_name", pycountry.countries.get(alpha_2=code).name)
         for code in country_codes if pycountry.countries.get(alpha_2=code)
     ]
 
-    # Build new metadata dictionary for the show
-    new_metadata = {
+    show_basic_fields = [
+        "sort_title", "original_title", "originally_available", "content_rating",
+        "studio", "summary", "country", "genre", "seasons"
+    ]
+    show_enhanced_fields = ["tagline"]
+    show_fields_to_write = show_basic_fields + (show_enhanced_fields if config.get("enhanced_metadata", True) else [])
+
+    new_metadata = {k: v for k, v in {
         "sort_title": title,
         "original_title": details.get("original_name", title),
         "originally_available": originally_available,
@@ -252,9 +302,8 @@ async def build_tv_metadata(plex_item, consolidated_metadata, dry_run=False, exi
         "summary": details.get("overview", ""),
         "genre": genres or [],
         "country": countries or [],
-    }
+    }.items() if k in show_fields_to_write and (k != "seasons")}
 
-    # Get existing seasons/episodes from Plex
     existing_seasons_episodes = await get_existing_plex_seasons_episodes(
         plex_item,
         _season_cache=season_cache,
@@ -263,9 +312,6 @@ async def build_tv_metadata(plex_item, consolidated_metadata, dry_run=False, exi
     seasons_data = {}
 
     async def process_season(season_info):
-        """
-        Process metadata for a single season, including all episodes.
-        """
         season_number = season_info.get("season_number")
         if season_number == 0 or season_number not in existing_seasons_episodes:
             return season_number, None
@@ -273,14 +319,13 @@ async def build_tv_metadata(plex_item, consolidated_metadata, dry_run=False, exi
         season_key = f"tv/{tmdb_id_int}/season/{season_number}"
         season_details = tmdb_response_cache.get(season_key)
         if not season_details:
-            season_details = await tmdb_api_request(season_key)
+            season_details = await tmdb_api_request(season_key, session=session)
             if season_details:
                 tmdb_response_cache[season_key] = season_details
             else:
                 logging.warning(f"[Metadata] No TMDb data found for Season {season_number} of {full_title}. Skipping...")
                 return season_number, None
 
-        # Extract show-level and season-level credits once
         show_crew = details.get("credits", {}).get("crew", []) or []
         show_cast = details.get("credits", {}).get("cast", []) or []
         season_crew = season_details.get("credits", {}).get("crew", []) or []
@@ -290,7 +335,6 @@ async def build_tv_metadata(plex_item, consolidated_metadata, dry_run=False, exi
         ep_writer_jobs = {"Writer", "Screenplay", "Story", "Creator", "Co-Writer", "Author", "Adaptation"}
 
         episodes = {}
-        episode_metadata_list = []
         for episode in season_details.get("episodes", []):
             ep_num = episode.get("episode_number")
             if ep_num not in existing_seasons_episodes[season_number]:
@@ -307,7 +351,11 @@ async def build_tv_metadata(plex_item, consolidated_metadata, dry_run=False, exi
             ep_air_date = episode.get("air_date", "") or ""
             ep_runtime = episode.get("runtime", None)
 
-            episode_dict = {
+            ep_basic_fields = ["sort_title", "original_title", "originally_available", "runtime", "summary"]
+            ep_enhanced_fields = ["cast", "guest", "director", "writer"]
+            ep_fields_to_write = ep_basic_fields + (ep_enhanced_fields if config.get("enhanced_metadata", True) else [])
+
+            episode_dict = {k: v for k, v in {
                 "title": episode.get("name", ""),
                 "sort_title": episode.get("name", ""),
                 "originally_available": ep_air_date,
@@ -317,8 +365,7 @@ async def build_tv_metadata(plex_item, consolidated_metadata, dry_run=False, exi
                 "guest": ep_guest_stars or [],
                 "director": ep_directors or [],
                 "writer": ep_writers or [],
-            }
-            episode_metadata_list.append((ep_num, episode_dict))
+            }.items() if k in ep_fields_to_write}
             episodes[ep_num] = episode_dict
 
         season_air_date = season_details.get("air_date", "") or ""
@@ -326,21 +373,18 @@ async def build_tv_metadata(plex_item, consolidated_metadata, dry_run=False, exi
             "originally_available": season_air_date,
             "episodes": episodes,
         }
-    
-    # Use asyncio.gather to process seasons concurrently
+
     season_infos = details.get("seasons", [])
     results = await asyncio.gather(*(process_season(s) for s in season_infos))
     for season_number, season_data in results:
         if season_data:
             seasons_data[season_number] = season_data
 
-    # Fetch external IDs for mapping
     external_ids = details.get("external_ids", {})
     tvdb_id_for_mapping = external_ids.get("tvdb_id", "") if external_ids else ""
     imdb_id_for_mapping = external_ids.get("imdb_id", "") if external_ids else ""
     mapping_id = int(tvdb_id_for_mapping) if tvdb_id_for_mapping else imdb_id_for_mapping or ""
 
-    # Build metadata entry for the show
     metadata_entry = {
         "match": {
             "title": title,
@@ -351,51 +395,47 @@ async def build_tv_metadata(plex_item, consolidated_metadata, dry_run=False, exi
         "seasons": seasons_data
     }
 
-    # Prepare expected fields for completeness calculation
-    show_expected_fields = [
-        "sort_title", "original_title", "originally_available", "content_rating",
-        "studio", "tagline", "summary", "country", "genre"
-    ]
-    season_expected_fields = ["originally_available"]
-    episode_expected_fields = [
-        "title", "sort_title", "originally_available", "runtime", "summary", "cast", "guest", "director", "writer"
-    ]
-
-    # Flatten all metadata for completeness calculation
-    grand_metadata = {}
-    for f in show_expected_fields:
-        grand_metadata[f"show_{f}"] = new_metadata.get(f)
-    for season_num, season_data in seasons_data.items():
-        for f in season_expected_fields:
-            grand_metadata[f"season{season_num}_{f}"] = season_data.get(f)
-    for season_num, season_data in seasons_data.items():
-        for ep_num, ep_data in season_data.get("episodes", {}).items():
-            for f in episode_expected_fields:
-                grand_metadata[f"season{season_num}_ep{ep_num}_{f}"] = ep_data.get(f)
-
-    grand_expected_fields = list(grand_metadata.keys())
+    expected_fields = [f for f in show_fields_to_write if f != "seasons"]
     grand_percent = log_metadata_completeness(
-        "TV Show Metadata", full_title, grand_metadata, grand_expected_fields
+        "TV Show Metadata", full_title, new_metadata, expected_fields, extra="", ignored_fields=ignored_fields
     )
 
     # Smart update: check if anything changed
+    if not run_upgrade:
+        if existing_yaml_data:
+            existing_metadata = existing_yaml_data.get("metadata", {}).get(full_title, {})
+            missing_fields = {k: v for k, v in new_metadata.items() if not existing_metadata.get(k)}
+            if not missing_fields:
+                logging.info(f"[Metadata] Skipping {full_title} ({grand_percent}%) [Scheduled upgrades not running].")
+                return grand_percent
+            changes = smart_update_needed(existing_metadata, missing_fields)
+            if not changes:
+                logging.info(f"[Metadata] No changes for {full_title} ({grand_percent}%). Preserving existing metadata.")
+                consolidated_metadata["metadata"][full_title] = existing_metadata
+                return grand_percent
+            else:
+                logging.info(f"[Metadata] Fields changed for {full_title} ({grand_percent}%): {changes}")
+                existing_metadata.update(missing_fields)
+                consolidated_metadata["metadata"][full_title] = {**metadata_entry, **existing_metadata}
+                return grand_percent
+
     if existing_yaml_data:
         existing_metadata = existing_yaml_data.get("metadata", {}).get(full_title, {})
         changes = smart_update_needed(existing_metadata, new_metadata)
         if not changes:
-            logging.debug(f"[Metadata Update] No changes for {full_title}. Preserving existing metadata.")
+            logging.info(f"[Metadata] No changes for {full_title} ({grand_percent}%). Preserving existing metadata.")
             consolidated_metadata["metadata"][full_title] = existing_metadata
             return grand_percent
+        else:
+            logging.info(f"[Metadata] Fields changed for {full_title} ({grand_percent}%). Updating metadata.")
 
     if dry_run:
         logging.info(f"[Metadata Dry Run] Would build metadata for TV Show: {full_title}")
         return
 
-    # Save metadata and update cache
     consolidated_metadata["metadata"][full_title] = metadata_entry
 
-    # Use standardized cache key format
     cache_key = f"tv:{title}:{year}"
-    update_tmdb_cache(cache_key, tmdb_id_int, title, year, "tv")
-    logging.debug(f"[Metadata] TV metadata built and saved for {full_title} using TMDb ID {tmdb_id}.")
+    update_meta_cache(cache_key, tmdb_id_int, title, year, "tv")
+    logging.info(f"[Metadata] TV metadata built and saved for {full_title} ({grand_percent}%) using TMDb ID {tmdb_id}.")
     return grand_percent

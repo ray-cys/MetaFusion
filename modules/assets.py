@@ -4,7 +4,7 @@ import uuid
 from pathlib import Path
 from helper.config import load_config
 from helper.plex import safe_title_year
-from helper.tmdb import tmdb_cache
+from helper.cache import load_cache
 
 config = load_config()
 
@@ -23,7 +23,7 @@ def get_best_poster(
     Select the best poster image from a list based on language and quality preferences.
     """
     if not images:
-        logging.debug("[Assets Selection] No images available to select the best poster.")
+        logging.debug("[Assets] No images available to select the best poster.")
         return None
 
     # Ensure fallback is always a list
@@ -33,7 +33,7 @@ def get_best_poster(
         fallback = [fallback]
     language_priority = [preferred_language] + fallback
 
-    logging.debug(f"[Assets Selection] Language priority for posters: {language_priority}")
+    logging.debug(f"[Assets] Language priority for posters: {language_priority}")
 
     # Use config defaults if not provided
     poster_sel = config["poster_selection"]
@@ -47,13 +47,13 @@ def get_best_poster(
     # Filter images by language priority
     for lang in language_priority:
         language_filtered = [img for img in images if img.get("iso_639_1") == lang]
-        logging.debug(f"[Assets Selection] Found {len(language_filtered)} posters for language '{lang}'")
+        logging.debug(f"[Assets] Found {len(language_filtered)} posters for language '{lang}'")
         if language_filtered:
             images_to_consider = language_filtered
             break
     else:
         images_to_consider = images
-        logging.debug(f"[Assets Selection] No posters found for preferred or fallback languages, considering all posters.")
+        logging.debug(f"[Assets] No posters found for preferred or fallback languages, considering all posters.")
 
     # High quality filter
     filtered = [
@@ -64,7 +64,7 @@ def get_best_poster(
     ]
     if filtered:
         best = max(filtered, key=lambda x: (x["vote_average"], x["width"] * x["height"]))
-        logging.debug(f"[Assets Selection] Selected high-quality poster: {best}")
+        logging.debug(f"[Assets] Selected high-quality poster: {best}")
         return best
 
     # Relaxed filter
@@ -76,7 +76,7 @@ def get_best_poster(
     ]
     if filtered:
         best = max(filtered, key=lambda x: (x["vote_average"], x["width"] * x["height"]))
-        logging.debug(f"[Assets Selection] Selected fallback poster: {best}")
+        logging.debug(f"[Assets] Selected fallback poster: {best}")
         return best
 
     # Fallback: poster with minimum width/height
@@ -86,16 +86,16 @@ def get_best_poster(
     ]
     if filtered:
         best = max(filtered, key=lambda x: x["width"] * x["height"])
-        logging.debug(f"[Assets Selection] Selected poster meeting minimum size as fallback: {best}")
+        logging.debug(f"[Assets] Selected poster meeting minimum size as fallback: {best}")
         return best
 
     # Fallback: poster with the largest width and height
     if images_to_consider:
         best = max(images_to_consider, key=lambda x: x["width"] * x["height"])
-        logging.debug(f"[Assets Selection] Selected poster meeting largest size as final fallback: {best}")
+        logging.debug(f"[Assets] Selected poster meeting largest size as final fallback: {best}")
         return best
     else:
-        logging.warning("[Assets Selection] No posters available at all after all filters.")
+        logging.warning("[Assets] No posters available at all after all filters.")
         return None
 
 def get_best_background(
@@ -111,7 +111,7 @@ def get_best_background(
     Select the best background image from a list based on quality preferences.
     """
     if not images:
-        logging.debug("[Assets Selection] No images available to select the best background.")
+        logging.debug("[Assets] No images available to select the best background.")
         return None
 
     bg_sel = config["background_selection"]
@@ -131,7 +131,7 @@ def get_best_background(
     ]
     if filtered:
         best = max(filtered, key=lambda x: (x["vote_average"], x["width"] * x["height"]))
-        logging.debug(f"[Assets Selection] Selected high-quality background: {best}")
+        logging.debug(f"[Assets] Selected high-quality background: {best}")
         return best
 
     # Relaxed filter
@@ -143,15 +143,23 @@ def get_best_background(
     ]
     if filtered:
         best = max(filtered, key=lambda x: (x["vote_average"], x["width"] * x["height"]))
-        logging.debug(f"[Assets Selection] Selected fallback background: {best}")
+        logging.debug(f"[Assets] Selected fallback background: {best}")
         return best
 
     # Fallback: any background
     best = max(images, key=lambda x: (x["vote_average"], x["width"] * x["height"]))
-    logging.debug(f"[Assets Selection] Selected any available background as final fallback: {best}")
+    logging.debug(f"[Assets] Selected any available background as final fallback: {best}")
     return best
 
-def should_upgrade(asset_path, new_image_data, new_image_path=None, cache_key=None, item=None, season_number=None):
+def should_upgrade(
+    asset_path,
+    new_image_data,
+    new_image_path=None,
+    cache_key=None,
+    item=None,
+    season_number=None,
+    asset_type="poster"
+):
     from PIL import Image
     """
     Determine if the new poster image should replace the existing one.
@@ -163,27 +171,33 @@ def should_upgrade(asset_path, new_image_data, new_image_path=None, cache_key=No
     if season_number is not None:
         label = f"{label} Season {season_number}"
 
-    vote_threshold = config["poster_selection"].get("vote_average_threshold", 5.0)
+    if asset_type == "background":
+        vote_threshold = config["background_selection"].get("vote_average_threshold", 5.0)
+        cache_key_name = "bg_average"
+    else:
+        vote_threshold = config["poster_selection"].get("vote_average_threshold", 5.0)
+        cache_key_name = "poster_average"
 
     # Compare to cached vote_average if available
     cached_votes = 0
-    if cache_key and cache_key in tmdb_cache:
-        cached = tmdb_cache[cache_key]
+    if cache_key:
+        cache = load_cache()
+        cached = cache.get(cache_key)
         if isinstance(cached, dict):
-            cached_votes = cached.get("vote_average", 0)
+            cached_votes = cached.get(cache_key_name, 0)
 
     # Only upgrade if new vote_average is higher than cached,
     # Or if there is no cached value and new_votes meets threshold
     if new_votes > cached_votes:
-        logging.debug(f"[Assets Recommendation] {label} upgraded based on vote average: {new_votes} (Cached: {cached_votes}, Threshold: {vote_threshold})")
+        logging.debug(f"[Assets] {label} upgraded based on vote average: {new_votes} (Cached: {cached_votes}, Threshold: {vote_threshold})")
         return not config.get("dry_run", False)
     elif cached_votes == 0 and new_votes >= vote_threshold:
-        logging.debug(f"[Assets Recommendation] {label} upgraded based on vote average threshold: {new_votes} (Threshold: {vote_threshold})")
+        logging.debug(f"[Assets] {label} upgraded based on vote average threshold: {new_votes} (Threshold: {vote_threshold})")
         return not config.get("dry_run", False)
 
     # If no existing poster, always upgrade
     if not asset_path.exists():
-        logging.info(f"[Assets Download] No existing poster for {label}. Downloading new poster.")
+        logging.info(f"[Assets] No existing poster for {label}. Downloading new poster.")
         return not config.get("dry_run", False)
 
     # If new image file exists, compare dimensions
@@ -192,21 +206,21 @@ def should_upgrade(asset_path, new_image_data, new_image_path=None, cache_key=No
             with Image.open(new_image_path) as img:
                 existing_width, existing_height = img.size
         except Exception as e:
-            logging.warning(f"[Assets Checksum] Failed to read temp image for comparison: {e}")
+            logging.warning(f"[Assets] Failed to read temp image for comparison: {e}")
             return not config.get("dry_run", False)
     else:
-        logging.debug(f"[Assets Checksum] No new_image_path provided for comparison. Skipping detailed check.")
+        logging.debug(f"[Assets] No new_image_path provided for comparison. Skipping detailed check.")
         return False
 
     # Prefer new image if it's larger than existing
     if new_width > existing_width or new_height > existing_height:
         logging.debug(
-            f"[Assets Recommendation] {label}: New {new_width}x{new_height}, "
+            f"[Assets] {label}: New {new_width}x{new_height}, "
             f"Existing {existing_width}x{existing_height}"
         )
         return not config.get("dry_run", False)
 
-    logging.debug(f"[Assets Upgrade] No upgrade needed for {safe_title_year(item)}. Existing image meets criteria.")
+    logging.debug(f"[Assets] No upgrade needed for {safe_title_year(item)}. Existing image meets criteria.")
     return False
 
 def generate_temp_path(library_name, extension="jpg"):
@@ -233,10 +247,10 @@ async def save_poster(image_content, save_path, item=None):
                 existing_checksum = hashlib.md5(existing_file.read()).hexdigest()
             
             if existing_checksum == new_checksum:
-                logging.info(f"[Assets Save] No changes detected for {safe_title_year(item)}. Skipping save.")
+                logging.info(f"[Assets] No changes detected for {safe_title_year(item)}. Skipping save.")
                 return
             else:
-                logging.info(f"[Assets Save] Checksum difference detected for {safe_title_year(item)}. Proceeding to update.")
+                logging.info(f"[Assets] Checksum difference detected for {safe_title_year(item)}. Proceeding to update.")
 
         if config.get("dry_run", False):
             logging.info(f"[Assets Dry Run] Would save poster for {safe_title_year(item)}")
@@ -248,7 +262,7 @@ async def save_poster(image_content, save_path, item=None):
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, save_path.write_bytes, image_content)
 
-        logging.debug(f"[Assets Save] Poster saved successfully for {safe_title_year(item)}")
+        logging.debug(f"[Assets] Poster saved successfully for {safe_title_year(item)}")
 
     except Exception as e:
-        logging.warning(f"[Assets Save] Failed to save poster for {safe_title_year(item)}: {e}")
+        logging.warning(f"[Assets] Failed to save poster for {safe_title_year(item)}: {e}")

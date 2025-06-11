@@ -46,3 +46,35 @@ def setup_logging(config):
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
     return logger
+
+def meta_banner(logger=None, width=50):
+    border = "=" * width
+    title = " ".join("METAFUSION").center(width - 6)
+    centered = f"|| {title} ||"
+    lines = [
+        border,
+        centered,
+        border,
+    ]
+    if logger:
+        for line in lines:
+            logger.info(line)
+    else:
+        for line in lines:
+            print(line)
+            
+def meta_summary_banner(logger=None, width=50):
+    border = "=" * width
+    title = "METAFUSION SUMMARY REPORT".center(width - 6)
+    centered = f"|| {title} ||"
+    lines = [
+        border,
+        centered,
+        border,
+    ]
+    if logger:
+        for line in lines:
+            logger.info(line)
+    else:
+        for line in lines:
+            print(line)

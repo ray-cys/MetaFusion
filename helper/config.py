@@ -29,6 +29,7 @@ DEFAULT_CONFIG = {
         "Movies", "TV Shows"
     ],
     "process_metadata": True,
+    "enhanced_metadata": True,
     "process_posters": True,
     "process_season_posters": True,
     "process_backgrounds": True,
@@ -36,13 +37,18 @@ DEFAULT_CONFIG = {
     "cleanup_orphans": True,
     "metadata_path": "metadata",
     "assets_path": "assets",
+    "upgrade_schedule": {
+        "frequency": "daily",
+        "days": [1, 4],
+        "times": 4,
+    },
     "poster_selection": {
         "preferred_width": 2000,
         "preferred_height": 3000,
         "min_width": 1000,
         "min_height": 1500,
-        "preferred_vote": 7.0,
-        "vote_relaxed": 5.0,
+        "preferred_vote": 5.0,
+        "vote_relaxed": 3.5,
         "vote_average_threshold": 5.0
     },
     "background_selection": {
@@ -50,11 +56,26 @@ DEFAULT_CONFIG = {
         "preferred_height": 2160,
         "min_width": 1920,
         "min_height": 1080,
-        "preferred_vote": 7.0,
-        "vote_relaxed": 5.0,
+        "preferred_vote": 5.0,
+        "vote_relaxed": 3.5,
         "vote_average_threshold": 5.0
     },
 }
+
+def log_disabled_features(config, logger):
+    """
+    Log which major processing features are disabled in the config.
+    """
+    features = [
+        ("process_metadata", "Metadata Extraction"),
+        ("process_posters", "Poster Assets Download"),
+        ("process_season_posters", "Season Assets Download"),
+        ("process_backgrounds", "Background Assets Download"),
+        ("cleanup_orphans", "Orphan Cleanup"),
+    ]
+    for key, desc in features:
+        if not config.get(key, True):
+            logger.info(f"[Config] {desc} is DISABLED in config and will not run.")
 
 def warn_unknown_keys(user_cfg, default_cfg, parent_key=""):
     """
