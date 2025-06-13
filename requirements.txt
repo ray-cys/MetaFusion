@@ -4,4 +4,6 @@ ruamel.yaml
 orjson
 pycountry
 Pillow
+aiohttp
+aiolimiter
 tqdm

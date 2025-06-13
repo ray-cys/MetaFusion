@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from pathlib import Path
 
@@ -15,10 +16,11 @@ def get_plex_libraries(plex):
         logging.error(f"[Plex] Failed to retrieve libraries: {e}")
         return []
 
-def get_existing_plex_seasons_episodes(plex_item, _season_cache=None, _episode_cache=None):
+async def get_existing_plex_seasons_episodes(plex_item, _season_cache=None, _episode_cache=None):
     """
     Get a mapping of seasons to episode numbers for a given Plex TV show item.
     Uses in-memory cache to avoid repeated API calls for the same item.
+    Runs heavy PlexAPI calls in a thread to avoid blocking the event loop.
     """
     if _season_cache is None:
         _season_cache = {}
@@ -29,7 +31,7 @@ def get_existing_plex_seasons_episodes(plex_item, _season_cache=None, _episode_c
     if item_key in _season_cache:
         seasons = _season_cache[item_key]
     else:
-        seasons = list(plex_item.seasons())
+        seasons = await asyncio.to_thread(lambda: list(plex_item.seasons()))
         _season_cache[item_key] = seasons
 
     seasons_episodes = {}
@@ -38,16 +40,17 @@ def get_existing_plex_seasons_episodes(plex_item, _season_cache=None, _episode_c
         if season_key in _episode_cache:
             episodes = _episode_cache[season_key]
         else:
-            episodes = list(season.episodes())
+            episodes = await asyncio.to_thread(lambda: list(season.episodes()))
             _episode_cache[season_key] = episodes
         episode_numbers = [ep.episodeNumber for ep in episodes]
         seasons_episodes[season.index] = episode_numbers
     return seasons_episodes
 
-def get_plex_movie_directory(item, _movie_cache=None):
+async def get_plex_movie_directory(item, _movie_cache=None):
     """
     Get the directory name containing the movie file for a Plex movie item.
     Uses in-memory cache to avoid repeated API calls for the same item.
+    Runs heavy PlexAPI calls in a thread to avoid blocking the event loop.
     """
     if _movie_cache is None:
         _movie_cache = {}
@@ -56,7 +59,7 @@ def get_plex_movie_directory(item, _movie_cache=None):
         if item_key in _movie_cache:
             parts = _movie_cache[item_key]
         else:
-            parts = list(item.iterParts()) if hasattr(item, 'iterParts') else []
+            parts = await asyncio.to_thread(lambda: list(item.iterParts())) if hasattr(item, 'iterParts') else []
             _movie_cache[item_key] = parts
         if parts:
             file_path = parts[0].file
@@ -66,10 +69,11 @@ def get_plex_movie_directory(item, _movie_cache=None):
     # Fallback to title and year if extraction fails
     return f"{getattr(item, 'title', 'Unknown')} ({getattr(item, 'year', 'Unknown')})"
 
-def get_plex_show_directory(item, _episode_cache=None):
+async def get_plex_show_directory(item, _episode_cache=None):
     """
     Get the directory name containing the show files for a Plex TV show item.
     Uses in-memory cache to avoid repeated API calls for the same item.
+    Runs heavy PlexAPI calls in a thread to avoid blocking the event loop.
     """
     if _episode_cache is None:
         _episode_cache = {}
@@ -80,7 +84,7 @@ def get_plex_show_directory(item, _episode_cache=None):
             if item_key in _episode_cache:
                 episodes = _episode_cache[item_key]
             else:
-                episodes = list(item.episodes())
+                episodes = await asyncio.to_thread(lambda: list(item.episodes()))
                 _episode_cache[item_key] = episodes
             for episode in episodes:
                 for media in getattr(episode, 'media', []):
