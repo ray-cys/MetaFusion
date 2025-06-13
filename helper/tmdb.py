@@ -1,159 +1,166 @@
-import os
 import orjson
 import logging
-import time
-import requests
-from pathlib import Path
-from threading import RLock
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
+import asyncio
+from aiolimiter import AsyncLimiter
 from helper.config import load_config
+from helper.cache import (
+    load_cache, save_cache, load_failed_cache, save_failed_cache
+)
 
 config = load_config()
-cache_lock = RLock()
-
-if os.environ.get("DOCKER_ENV", "0") == "1":
-    CACHE_PATH = Path.cwd() / "cache"
-else:
-    CACHE_PATH = Path(__file__).parent.parent / "cache"
-CACHE_PATH.mkdir(exist_ok=True)
-CACHE_FILE = CACHE_PATH / "tmdb_cache.json"
-FAILED_CACHE_FILE = CACHE_PATH / "failed_items.json"
-
-def load_cache():
-    """
-    Load the TMDb cache from disk.
-    """
-    if CACHE_FILE.exists() and CACHE_FILE.stat().st_size > 0:
-        with open(CACHE_FILE, "rb") as f:
-            return orjson.loads(f.read())
-    return {}
-
-def save_cache(cache):
-    """
-    Save the TMDb cache to disk.
-    """
-    with open(CACHE_FILE, "wb") as f:
-        f.write(orjson.dumps(cache, option=orjson.OPT_INDENT_2))
-
-def load_failed_cache():
-    """
-    Load the failed TMDb lookups cache from disk.
-    """
-    if FAILED_CACHE_FILE.exists() and FAILED_CACHE_FILE.stat().st_size > 0:
-        with open(FAILED_CACHE_FILE, "rb") as f:
-            return orjson.loads(f.read())
-    return {}
-
-def save_failed_cache(failed_items):
-    """
-    Save the failed TMDb lookups cache to disk.
-    """
-    with open(FAILED_CACHE_FILE, "wb") as f:
-        f.write(orjson.dumps(failed_items, option=orjson.OPT_INDENT_2))
-
-tmdb_cache = load_cache()
-failed_cache = load_failed_cache()
 tmdb_response_cache = {}
+tmdb_limiter = AsyncLimiter(40, 10)
 
-# Set up a requests session with retry and connection pooling
-tmdb_session = requests.Session()
-adapter = HTTPAdapter(
-    pool_connections=config["network"].get("pool_connections", 100),
-    pool_maxsize=config["network"].get("pool_maxsize", 100),
-    max_retries=Retry(
-        total=config["network"].get("max_retries", 3),
-        backoff_factor=config["network"].get("backoff_factor", 1),
-        status_forcelist=[500, 502, 503, 504]
-    )
-)
-tmdb_session.mount("http://", adapter)
-tmdb_session.mount("https://", adapter)
-
-def safe_get_with_retries(url, params=None, retries=None, backoff_factor=None, cache=True, **kwargs):
+async def tmdb_api_request(
+    endpoint_or_url,
+    params=None,
+    retries=3,
+    delay=2,
+    backoff_factor=2,
+    api_key=None,
+    language=None,
+    region=None,
+    cache=True,
+    raw=False,
+    session=None,
+    **kwargs
+):
+    import hashlib
     """
-    Make a GET request with retries and optional in-memory response caching.
+    Make an async TMDb API request (JSON or raw), with retries, rate limiting, and caching.
+    If `raw` is True, returns bytes (for images); else returns JSON.
     """
-    backoff = backoff_factor if backoff_factor is not None else config["network"].get("backoff_factor", 1)
-    max_retries = retries if retries is not None else config["network"].get("max_retries", 3)
-    timeout = config["network"].get("timeout", 10)
-    cache_key = f"{url}:{orjson.dumps(params or {}, option=orjson.OPT_SORT_KEYS).decode()}"
-    if cache and cache_key in tmdb_response_cache:
-        logging.debug(f"[API Cache] Returning cached response for URL: {url}")
-        return tmdb_response_cache[cache_key]
+    if session is None:
+        raise ValueError("An aiohttp session must be passed to tmdb_api_request")
 
-    for attempt in range(1, max_retries + 1):
-        try:
-            response = tmdb_session.get(url, params=params, timeout=timeout, **kwargs)
-            if response.ok:
-                if cache:
-                    tmdb_response_cache[cache_key] = response
-                return response
-            logging.warning(f"[API Cache] Attempt {attempt}: Status {response.status_code} for URL: {url}")
-        except Exception as e:
-            logging.warning(f"[API Cache] Attempt {attempt}: Request failed for URL {url}: {e}")
-        time.sleep(backoff * attempt)
-    logging.error(f"[API Cache] All retries failed for URL: {url}")
-    return None
+    # Determine if this is a full URL (for images) or an endpoint (for API)
+    if endpoint_or_url.startswith("http"):
+        url = endpoint_or_url
+        query = params or {}
+        cache_key = f"{url}:{orjson.dumps(query, option=orjson.OPT_SORT_KEYS).decode()}"
+    else:
+        if api_key is None:
+            api_key = config["tmdb"]["api_key"]
+        if language is None:
+            language = config["tmdb"].get("language", "en")
+        if region is None:
+            region = config["tmdb"].get("region", "US")
+        url = f"https://api.themoviedb.org/3/{endpoint_or_url}"
+        query = {"api_key": api_key}
+        if params is None:
+            params = {}
+        if "language" not in params:
+            params["language"] = language
+        if "region" not in params:
+            params["region"] = region
+        query.update(params)
+        cache_key = f"{url}:{orjson.dumps(query, option=orjson.OPT_SORT_KEYS).decode()}"
 
-def tmdb_api_request(endpoint, params=None, retries=3, delay=2, backoff_factor=2, api_key=None, language=None, region=None):
-    """
-    Make a TMDb API request with retries and exponential backoff.
-    """
-    logging.debug(f"[TMDb] Requesting {endpoint} for {params}")
-    if api_key is None:
-        api_key = config["tmdb"]["api_key"]
-    if language is None:
-        language = config["tmdb"].get("language", "en")
-    if region is None:
-        region = config["tmdb"].get("region", "US")
-
-    url = f"https://api.themoviedb.org/3/{endpoint}"
-    query = {"api_key": api_key}
-    if params is None:
-        params = {}
-    if "language" not in params:
-        params["language"] = language
-    if "region" not in params:
-        params["region"] = region
-    query.update(params)
-
-    cache_key = f"{url}:{orjson.dumps(query, option=orjson.OPT_SORT_KEYS).decode()}"
-    if cache_key in tmdb_response_cache:
-        logging.debug(f"[TMDb API] Returning in-memory cached response for {url}")
-        return tmdb_response_cache[cache_key]
+    cache_hash = hashlib.sha256(cache_key.encode()).hexdigest()
+    if cache and cache_hash in tmdb_response_cache:
+        logging.debug(f"[TMDb API] Returning cached response for {url} params: {params}")
+        return tmdb_response_cache[cache_hash]
 
     for attempt in range(1, retries + 1):
         try:
-            response = tmdb_session.get(url, params=query, timeout=20)
-            if response.status_code == 200:
-                data = response.json()
-                if data:
-                    tmdb_response_cache[cache_key] = data
-                    logging.debug(f"[TMDb API Response] URL: {response.url}")
-                    return data
-                else:
-                    logging.warning(f"[TMDb API] Empty JSON response (Attempt {attempt}) for {url}")
-            elif response.status_code == 429:
-                retry_after = int(response.headers.get("Retry-After", delay))
-                logging.warning(f"[TMDb API] Rate limited (HTTP 429). Sleeping {retry_after}s before retry...")
-                time.sleep(retry_after)
-            else:
-                logging.warning(f"[TMDb API] Non-200 response {response.status_code} for {url}")
-        except requests.exceptions.RequestException as e:
-            logging.error(f"[TMDb API] Request exception (Attempt {attempt}): {e}")
+            async with tmdb_limiter:
+                async with session.get(url, params=query, **kwargs) as response:
+                    if response.status == 200:
+                        if raw:
+                            data = await response.read()
+                        else:
+                            data = await response.json()
+                        if cache:
+                            tmdb_response_cache[cache_hash] = data
+                        return data
+                    elif response.status == 429:
+                        retry_after = int(response.headers.get("Retry-After", delay))
+                        logging.warning(f"[TMDb API] Rate limited (HTTP 429). Sleeping {retry_after}s before retry...")
+                        await asyncio.sleep(retry_after)
+                    else:
+                        logging.warning(f"[TMDb API] Non-200 response {response.status} for {url}")
+        except Exception as e:
+            logging.warning(f"[TMDb API] Attempt {attempt}: Request failed for URL {url}: {e}")
         if attempt < retries:
             sleep_time = delay * (backoff_factor ** (attempt - 1))
             logging.info(f"[TMDb API] Retrying in {sleep_time}s... (Attempt {attempt + 1}/{retries})")
-            time.sleep(sleep_time)
+            await asyncio.sleep(sleep_time)
     logging.error(f"[TMDb API] Failed after {retries} attempts for {url}")
-    logging.debug(f"[TMDb] Finished {endpoint} for {params}")
     return None
 
-def tmdb_find_id(title, year, media_type):
+async def resolve_tmdb_id(item, title, year, media_type, session=None):
+    import re
+    """
+    Resolve the TMDb ID for a given item, using cache, Plex GUIDs, or TMDb search.
+    """
+    if session is None:
+        raise ValueError("An aiohttp session must be passed to resolve_tmdb_id")
+
+    cache = load_cache()
+    failed_cache = load_failed_cache()
+    # Standardize media_type
+    media_type = media_type.lower()
+    if media_type == "show":
+        media_type = "tv"
+    elif media_type != "movie" and media_type != "tv":
+        media_type = "movie"
+    cache_key = f"{media_type}:{title}:{year}"
+    if cache_key in cache:
+        cache_entry = cache[cache_key]
+        if isinstance(cache_entry, dict):
+            logging.debug(f"[TMDb Resolution] TMDb ID found in cache for {title} ({year}): {cache_entry.get('tmdb_id')}")
+            return cache_entry.get('tmdb_id')
+        else:
+            logging.debug(f"[TMDb Resolution] TMDb ID found in cache for {title} ({year}): {cache_entry}")
+            return cache_entry
+    if cache_key in failed_cache:
+        logging.warning(f"[TMDb Resolution] Skipping repeated failed lookup for {title} ({year})")
+        return None
+
+    tmdb_id = None
+    # Try to extract from Plex GUIDs
+    if item:
+        for guid in getattr(item, "guids", []):
+            guid_id = guid.id
+            if "tmdb" in guid_id:
+                tmdb_id = guid_id.split("://")[1].split("?")[0]
+                logging.debug(f"[TMDb Resolution] TMDb ID extracted directly from Plex GUID: {tmdb_id}")
+                break
+
+    if tmdb_id:
+        cache[cache_key] = {"tmdb_id": tmdb_id}
+        save_cache(cache)
+        return tmdb_id
+
+    # Fallback: search by title/year and cleaned title
+    search_attempts = [(title, year), (title, None)]
+    cleaned_title = re.sub(r'\s*\(.*?\)', '', title).strip()
+    if cleaned_title != title:
+        search_attempts.extend([(cleaned_title, year), (cleaned_title, None)])
+
+    for search_title, search_year in search_attempts:
+        tmdb_id = await tmdb_find_id(search_title, search_year, media_type, session=session)
+        if tmdb_id:
+            break
+
+    if tmdb_id:
+        cache[cache_key] = {"tmdb_id": tmdb_id}
+        save_cache(cache)
+        logging.debug(f"[TMDb Resolution] TMDb ID resolved and cached for {title} ({year}): {tmdb_id}")
+    else:
+        failed_cache[cache_key] = True
+        save_failed_cache(failed_cache)
+        logging.warning(f"[TMDb Resolution] Could not resolve TMDb ID for {title} ({year}) after all attempts.")
+
+    return tmdb_id
+
+async def tmdb_find_id(title, year, media_type, session=None):
     """
     Search TMDb for a title and year, returning the best-matched TMDb ID.
     """
+    if session is None:
+        raise ValueError("An aiohttp session must be passed to tmdb_find_id")
+
     logging.debug(f"[TMDb Search] Searching for Title: {title}, Year: {year}, Type: {media_type}")
     endpoint = f"search/{media_type}"
     params = {
@@ -163,7 +170,7 @@ def tmdb_find_id(title, year, media_type):
     }
     if year:
         params["year"] = year
-    data = tmdb_api_request(endpoint, params=params)
+    data = await tmdb_api_request(endpoint, params=params, session=session)
     if data and data.get("results"):
         # Sort by vote_count and popularity to get the best match
         best_result = sorted(
@@ -177,86 +184,59 @@ def tmdb_find_id(title, year, media_type):
     logging.debug(f"[TMDb API] No results found for {title} ({year})")
     return None
 
-def resolve_tmdb_id(item, title, year, media_type):
-    import re
+async def download_poster(image_path, save_path, item=None, session=None):
+    from helper.plex import safe_title_year
+    from modules.assets import save_poster
     """
-    Resolve the TMDb ID for a given item, using cache, Plex GUIDs, or TMDb search.
+    Download a poster image from TMDb and save it to the specified path.
     """
-    # Standardize media_type
-    media_type = media_type.lower()
-    if media_type == "show":
-        media_type = "tv"
-    elif media_type != "movie" and media_type != "tv":
-        media_type = "movie"
-    cache_key = f"{media_type}:{title}:{year}"
-    with cache_lock:
-        if cache_key in tmdb_cache:
-            cache_entry = tmdb_cache[cache_key]
-            if isinstance(cache_entry, dict):
-                logging.debug(f"[TMDb Resolution] TMDb ID found in cache for {title} ({year}): {cache_entry.get('tmdb_id')}")
-                return cache_entry.get("tmdb_id")
-            else:
-                logging.debug(f"[TMDb Resolution] TMDb ID found in cache for {title} ({year}): {cache_entry}")
-                return cache_entry
-        if cache_key in failed_cache:
-            logging.warning(f"[TMDb Resolution] Skipping repeated failed lookup for {title} ({year})")
-            return None
+    if session is None:
+        raise ValueError("An aiohttp session must be passed to download_poster")
 
-    tmdb_id = None
-    # Try to extract from Plex GUIDs
-    if item:
-        for guid in getattr(item, "guids", []):
-            guid_id = guid.id
-            if "tmdb" in guid_id:
-                tmdb_id = guid_id.split("://")[1].split("?")[0]
-                logging.debug(f"[TMDb Resolution] TMDb ID extracted directly from Plex GUID: {tmdb_id}")
-                break
+    try:
+        url = f"https://image.tmdb.org/t/p/original{image_path}"
+        logging.debug(f"[Assets Download] Downloading {safe_title_year(item)} poster from URL: {url}")
 
-    if tmdb_id:
-        with cache_lock:
-            tmdb_cache[cache_key] = {"tmdb_id": tmdb_id}
-            save_cache(tmdb_cache)
-        return tmdb_id
+        if save_path.exists() and not config.get("dry_run", False):
+            logging.info(f"[Assets Download] Poster {safe_title_year(item)} already exists. Skipping download.")
+            return True
 
-    # Fallback: search by title/year and cleaned title
-    search_attempts = [(title, year), (title, None)]
-    cleaned_title = re.sub(r'\s*\(.*?\)', '', title).strip()
-    if cleaned_title != title:
-        search_attempts.extend([(cleaned_title, year), (cleaned_title, None)])
+        if config.get("dry_run", False):
+            logging.info(f"[Assets Dry Run] Would download {safe_title_year(item)} from {url}")
+            return True 
 
-    for search_title, search_year in search_attempts:
-        tmdb_id = tmdb_find_id(search_title, search_year, media_type)
-        if tmdb_id:
-            break
+        response_content = await tmdb_api_request(url, raw=True, cache=False, session=session)
+        if not response_content:
+            logging.warning(f"[Assets Download] Failed to download image for {safe_title_year(item)}")
+            return False
 
-    if tmdb_id:
-        with cache_lock:
-            tmdb_cache[cache_key] = {"tmdb_id": tmdb_id}
-            save_cache(tmdb_cache)
-        logging.debug(f"[TMDb Resolution] TMDb ID resolved and cached for {title} ({year}): {tmdb_id}")
-    else:
-        with cache_lock:
-            failed_cache[cache_key] = True
-            save_failed_cache(failed_cache)
-        logging.warning(f"[TMDb Resolution] Could not resolve TMDb ID for {title} ({year}) after all attempts.")
+        try:
+            await save_poster(response_content, save_path, item)
+            logging.debug(f"[Assets Download] Downloaded poster for {safe_title_year(item)}")
+            return True
+        except Exception as e:
+            logging.warning(f"[Assets Download] Failed to save poster for {safe_title_year(item)}: {e}")
+            return False
 
-    return tmdb_id
+    except Exception as e:
+        logging.warning(f"[Assets Download] Failed to process poster download for {safe_title_year(item)}: {e}")
+        return False
 
-def update_tmdb_cache(cache_key, tmdb_id, title, year, media_type, **kwargs):
+def update_meta_cache(cache_key, tmdb_id, title, year, media_type, **kwargs):
     from datetime import datetime
     """
     Update the TMDb cache with a new or updated entry.
     """
-    with cache_lock:
-        entry = tmdb_cache.get(cache_key, {})
-        # Always update these fields
-        entry["tmdb_id"] = tmdb_id
-        entry["title"] = title
-        entry["year"] = year
-        entry["media_type"] = media_type
-        entry["last_updated"] = datetime.now().isoformat()
-        # Optionally update any extra fields passed as kwargs
-        for k, v in kwargs.items():
-            entry[k] = v
-        tmdb_cache[cache_key] = entry
-        save_cache(tmdb_cache)
+    cache = load_cache() 
+    entry = cache.get(cache_key, {})
+    # Always update these fields
+    entry["tmdb_id"] = tmdb_id
+    entry["title"] = title
+    entry["year"] = year
+    entry["media_type"] = media_type
+    entry["last_updated"] = datetime.now().isoformat()
+    # Optionally update any extra fields passed as kwargs
+    for k, v in kwargs.items():
+        entry[k] = v
+    cache[cache_key] = entry
+    save_cache(cache)

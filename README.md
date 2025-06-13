@@ -60,6 +60,12 @@ pip install -r requirements.txt
 Open `config.yml` and fill in the following:
 
 ```yaml
+# Dry run
+dry_run: false
+
+# Logging
+log_level: "INFO"
+
 #Plex server configuration
 plex:
   url: "http://localhost:32400"
@@ -70,7 +76,7 @@ tmdb:
   api_key: "YOUR_TMDB_API_KEY"
   language: "en"
   region: "US"
-  fallback_languages:
+  fallback:
     - zh
     - ja
     - fr
@@ -79,28 +85,19 @@ tmdb:
 preferred_libraries:
   - Movies
   - TV Shows
-process_libraries: true
+
+# Metadata & Asset processing
+process_metadata: true
+process_posters: true
+process_season_posters: true
+process_backgrounds: true
 cleanup_orphans: true
 
-# Logging
-log_level: "INFO"
-log_file: "metadata.log"
-
-# Threading
-threads:
-  max_workers: 10
-  timeout: 300
-
 # Metadata output
-metadata_path: "/config/metadata/"
+metadata_path: "/path/to/metadata/"
 
 # Asset management
-assets:
-  assets_path: "/path/to/assets"
-  poster_filename: "poster.jpg"
-  season_filename: "Season{season_number:02}.jpg"
-  cleanup_orphans: true
-  thread_count: 10
+assets_path: "/path/to/assets"
 
 # Poster selection preferences
 poster_selection:
@@ -108,21 +105,21 @@ poster_selection:
   preferred_height: 3000
   min_width: 1000
   min_height: 1500
-  preferred_vote: 7.0
-  vote_relaxed: 5.0
+  preferred_vote: 5.0
+  vote_relaxed: 3.5
   vote_average_threshold: 5.0
 
-# Network and retry settings
-network:
-  backoff_factor: 1
-  max_retries: 3
-  timeout: 10
-  pool_connections: 100
-  pool_maxsize: 100
+# Background selection preferences
+background_selection:
+  preferred_width: 3840
+  preferred_height: 2160
+  min_width: 1920
+  min_height: 1080
+  preferred_vote: 5.0
+  vote_relaxed: 3.5
+  vote_average_threshold: 5.0
 
-# Dry run
-dry_run_default: false
-dry_run: false
+
 ```
 
 #### 🔑 **How to Get Your Plex Token**
@@ -177,11 +174,11 @@ When enabled, the script will:
 Here’s what’s coming next (and how you can help!):
 
 1. **Background Poster Download**  
-   - 🎨 Download TMDb backgrounds for movies and TV shows.
-   - User-configurable width, height, vote average, and language preferences.
+   - 🎨 Download TMDb backgrounds for movies and TV shows. *Done
+   - User-configurable width, height, vote average, and language preferences. *Done
 
 2. **Configurable Asset Types**  
-   - 🖼️ Turn season posters and background downloads on/off via config options.
+   - 🖼️ Turn season posters and background downloads on/off via config options. *Done
 
 3. **Enhanced Episode Metadata**  
    - 🎭 Improved fallbacks to fetch more detailed crew and cast info for episodes.
@@ -194,7 +191,7 @@ Here’s what’s coming next (and how you can help!):
    - Include poster URLs for collections and franchises.
 
 6. **Speed Optimizations**  
-   - ⚡ Further parallelization and smarter caching for even faster runs.
+   - ⚡ Further parallelization and smarter caching for even faster runs. *Done at the best i could
 
 ---
 

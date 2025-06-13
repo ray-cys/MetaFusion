@@ -14,6 +14,7 @@ CONFIG_FILE = Path(
 # Default configuration at module level
 DEFAULT_CONFIG = {
     "dry_run": False,
+    "log_level": "INFO",
     "plex": {
         "url": "",
         "token": ""
@@ -22,42 +23,59 @@ DEFAULT_CONFIG = {
         "api_key": "",
         "language": "en",
         "region": "US",
-        "fallback_languages": ["zh", "ja", "zh-yue"]
+        "fallback": ["zh", "ja"]
     },
+    "preferred_libraries": [
+        "Movies", "TV Shows"
+    ],
+    "process_metadata": True,
+    "enhanced_metadata": True,
+    "process_posters": True,
+    "process_season_posters": True,
+    "process_backgrounds": True,
+    "cleanup": {"run_by_default": True, "skip_by_default": False},
+    "cleanup_orphans": True,
     "metadata_path": "metadata",
-    "assets": {
-        "assets_path": "assets",
-        "poster_filename": "poster.jpg",
-        "season_filename": "Season{season_number:02}.jpg",
-        "cleanup_orphans": True,
-        "thread_count": 10
+    "assets_path": "assets",
+    "upgrade_schedule": {
+        "frequency": "daily",
+        "days": [1, 4],
+        "times": 4,
     },
     "poster_selection": {
         "preferred_width": 2000,
         "preferred_height": 3000,
         "min_width": 1000,
         "min_height": 1500,
-        "preferred_vote": 7.0,
-        "vote_relaxed": 5.0,
+        "preferred_vote": 5.0,
+        "vote_relaxed": 3.5,
         "vote_average_threshold": 5.0
     },
-    "preferred_libraries": ["Movies", "TV Shows"],
-    "threads": {"max_workers": 5, "timeout": 300},
-    "network": {
-        "backoff_factor": 1,
-        "max_retries": 3,
-        "timeout": 10,
-        "pool_connections": 100,
-        "pool_maxsize": 100
+    "background_selection": {
+        "preferred_width": 3840,
+        "preferred_height": 2160,
+        "min_width": 1920,
+        "min_height": 1080,
+        "preferred_vote": 5.0,
+        "vote_relaxed": 3.5,
+        "vote_average_threshold": 5.0
     },
-    "log_level": "INFO",
-    "log_file": "metadata.log",
-    "log_path": "logs",
-    "cleanup": {"run_by_default": True, "skip_by_default": False},
-    "dry_run_default": False,
-    "process_libraries": True,
-    "cleanup_orphans": True 
 }
+
+def log_disabled_features(config, logger):
+    """
+    Log which major processing features are disabled in the config.
+    """
+    features = [
+        ("process_metadata", "Metadata Extraction"),
+        ("process_posters", "Poster Assets Download"),
+        ("process_season_posters", "Season Assets Download"),
+        ("process_backgrounds", "Background Assets Download"),
+        ("cleanup_orphans", "Orphan Cleanup"),
+    ]
+    for key, desc in features:
+        if not config.get(key, True):
+            logger.info(f"[Config] {desc} is DISABLED in config and will not run.")
 
 def warn_unknown_keys(user_cfg, default_cfg, parent_key=""):
     """
@@ -87,7 +105,7 @@ def deep_merge_dicts(default, user):
 def apply_env_overrides(config, prefix=""):
     """
     Recursively override config values with environment variables.
-    For nested keys, use underscores, e.g., PLEX_URL, ASSETS_ASSETS_PATH.
+    For nested keys, use underscores, e.g., PLEX_URL, ASSETS_PATH.
     """
     for key, value in config.items():
         env_key = (prefix + "_" + key).upper() if prefix else key.upper()

@@ -35,10 +35,13 @@ cache/
 
 # Metadata and assets (user-generated, not source)
 metadata/
+*.jpg
 assets/
+*.yml
 
 # Sensitive or user-specific config
 config.yml
+*.profile
 
 # TMDb and other caches
 cache/
