@@ -6,11 +6,9 @@ from helper.config import load_config, log_disabled_features
 from helper.logging import setup_logging, meta_banner, meta_summary_banner
 from helper.plex import get_plex_libraries
 from helper.stats import human_readable_size
-from helper.schedule import should_run_upgrade, set_last_run_time
 
 config = load_config()
 logger = setup_logging(config)
-run_upgrade = should_run_upgrade(config)
 
 if __name__ == "__main__":
     from plexapi.server import PlexServer
@@ -42,9 +40,6 @@ if __name__ == "__main__":
                 metadata_summaries = {}
                 library_filesize = {}
 
-                # Upgrade scheduling
-                run_upgrade = should_run_upgrade(config, cache_key="last_metadata_upgrade")
-
                 # Prepare to process libraries
                 tasks = []
                 for lib in libraries:
@@ -68,15 +63,12 @@ if __name__ == "__main__":
                             season_cache=season_cache,
                             episode_cache=episode_cache,
                             movie_cache=movie_cache,
-                            run_upgrade=run_upgrade,
                             session=session
                         )
                     )
 
                 if tasks:
                     await asyncio.gather(*tasks)
-                    if run_upgrade:
-                        set_last_run_time(cache_key="last_metadata_upgrade")
                 else:
                     logger.info("[Metadata] No libraries scheduled to process.")
 
@@ -104,7 +96,7 @@ if __name__ == "__main__":
                 processed_count = sum(library_item_counts.values())
                 logger.info(f"[Summary] Total items processed: {processed_count}")
 
-                logger.info("[Per-Library Metadata Counts]")
+                logger.info("[Per-Library Metadata Counts ]")
                 for lib_name, count in library_item_counts.items():
                     logger.info(f"  - {lib_name}: {count} items processed")
 

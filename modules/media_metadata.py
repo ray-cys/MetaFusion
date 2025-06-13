@@ -40,7 +40,6 @@ async def build_movie_metadata(
     plex_item,
     consolidated_metadata,
     dry_run=False,
-    run_upgrade=True,
     existing_yaml_data=None,
     session=None,
     ignored_fields=None
@@ -173,23 +172,22 @@ async def build_movie_metadata(
     percent = log_metadata_completeness("Movie Metadata", full_title, new_metadata, expected_fields, extra="", ignored_fields=ignored_fields)
 
     # Smart update: check if anything changed
-    if not run_upgrade:
-        if existing_yaml_data:
-            existing_metadata = existing_yaml_data.get("metadata", {}).get(full_title, {})
-            missing_fields = {k: v for k, v in new_metadata.items() if not existing_metadata.get(k)}
-            if not missing_fields:
-                logging.info(f"[Metadata] Skipping {full_title} ({percent}%) [Scheduled upgrades not running].")
-                return percent
-            changes = smart_update_needed(existing_metadata, missing_fields)
-            if not changes:
-                logging.info(f"[Metadata] No changes for {full_title} ({percent}%). Preserving existing metadata.")
-                consolidated_metadata["metadata"][full_title] = existing_metadata
-                return percent
-            else:
-                logging.info(f"[Metadata] Fields changed for {full_title} ({percent}%): {changes}")
-                existing_metadata.update(missing_fields)
-                consolidated_metadata["metadata"][full_title] = {**metadata_entry, **existing_metadata}
-                return percent
+    if existing_yaml_data:
+        existing_metadata = existing_yaml_data.get("metadata", {}).get(full_title, {})
+        missing_fields = {k: v for k, v in new_metadata.items() if not existing_metadata.get(k)}
+        if not missing_fields:
+            logging.info(f"[Metadata] Skipping {full_title} ({percent}%) [Scheduled upgrades not running].")
+            return percent
+        changes = smart_update_needed(existing_metadata, missing_fields)
+        if not changes:
+            logging.info(f"[Metadata] No changes for {full_title} ({percent}%). Preserving existing metadata.")
+            consolidated_metadata["metadata"][full_title] = existing_metadata
+            return percent
+        else:
+            logging.info(f"[Metadata] Fields changed for {full_title} ({percent}%): {changes}")
+            existing_metadata.update(missing_fields)
+            consolidated_metadata["metadata"][full_title] = {**metadata_entry, **existing_metadata}
+            return percent
 
     if existing_yaml_data:
         existing_metadata = existing_yaml_data.get("metadata", {}).get(full_title, {})
@@ -227,7 +225,6 @@ async def build_tv_metadata(
     plex_item,
     consolidated_metadata,
     dry_run=False,
-    run_upgrade=True,
     existing_yaml_data=None,
     season_cache=None,
     episode_cache=None,
@@ -401,23 +398,22 @@ async def build_tv_metadata(
     )
 
     # Smart update: check if anything changed
-    if not run_upgrade:
-        if existing_yaml_data:
-            existing_metadata = existing_yaml_data.get("metadata", {}).get(full_title, {})
-            missing_fields = {k: v for k, v in new_metadata.items() if not existing_metadata.get(k)}
-            if not missing_fields:
-                logging.info(f"[Metadata] Skipping {full_title} ({grand_percent}%) [Scheduled upgrades not running].")
-                return grand_percent
-            changes = smart_update_needed(existing_metadata, missing_fields)
-            if not changes:
-                logging.info(f"[Metadata] No changes for {full_title} ({grand_percent}%). Preserving existing metadata.")
-                consolidated_metadata["metadata"][full_title] = existing_metadata
-                return grand_percent
-            else:
-                logging.info(f"[Metadata] Fields changed for {full_title} ({grand_percent}%): {changes}")
-                existing_metadata.update(missing_fields)
-                consolidated_metadata["metadata"][full_title] = {**metadata_entry, **existing_metadata}
-                return grand_percent
+    if existing_yaml_data:
+        existing_metadata = existing_yaml_data.get("metadata", {}).get(full_title, {})
+        missing_fields = {k: v for k, v in new_metadata.items() if not existing_metadata.get(k)}
+        if not missing_fields:
+            logging.info(f"[Metadata] Skipping {full_title} ({grand_percent}%) [Scheduled upgrades not running].")
+            return grand_percent
+        changes = smart_update_needed(existing_metadata, missing_fields)
+        if not changes:
+            logging.info(f"[Metadata] No changes for {full_title} ({grand_percent}%). Preserving existing metadata.")
+            consolidated_metadata["metadata"][full_title] = existing_metadata
+            return grand_percent
+        else:
+            logging.info(f"[Metadata] Fields changed for {full_title} ({grand_percent}%): {changes}")
+            existing_metadata.update(missing_fields)
+            consolidated_metadata["metadata"][full_title] = {**metadata_entry, **existing_metadata}
+            return grand_percent
 
     if existing_yaml_data:
         existing_metadata = existing_yaml_data.get("metadata", {}).get(full_title, {})

@@ -1,6 +1,5 @@
 import orjson
 import logging
-import aiohttp
 import asyncio
 from aiolimiter import AsyncLimiter
 from helper.config import load_config

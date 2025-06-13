@@ -5,7 +5,6 @@ from helper.cache import load_cache, save_cache
 from helper.plex import get_plex_movie_directory, get_plex_show_directory
 
 config = load_config()
-SPECIAL_CACHE_KEYS = {"last_metadata_upgrade"}
 
 async def cleanup_orphans(plex, libraries=None, asset_path=None, existing_assets=None):
     from ruamel.yaml import YAML
@@ -47,7 +46,7 @@ async def cleanup_orphans(plex, libraries=None, asset_path=None, existing_assets
     cache = load_cache()  # Always load fresh cache
     cache_keys_to_remove = [
         key for key in list(cache.keys())
-        if key not in global_valid_cache_keys and key not in SPECIAL_CACHE_KEYS
+        if key not in global_valid_cache_keys
     ]
     for key in cache_keys_to_remove:
         del cache[key]

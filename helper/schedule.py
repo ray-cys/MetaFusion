@@ -1,44 +1,45 @@
 import datetime
-from helper.cache import load_cache, save_cache
+import os
 
-def get_last_run_time(cache_key="last_metadata_upgrade"):
-    cache = load_cache()
-    ts = cache.get(cache_key)
-    if not ts:
-        return None
-    try:
-        return datetime.datetime.fromisoformat(ts)
-    except Exception:
-        return None
+def should_run_now(config=None):
+    """
+    Determines if the script should run now, based on schedule in config or environment variables.
+    Supports multiple run_times (["HH:MM", ...]) for precise scheduling.
+    """
+    frequency = None
+    schedule = {}
+    run_times = ["00:00"]  # Default to midnight
 
-def set_last_run_time(cache_key="last_metadata_upgrade"):
-    cache = load_cache()
-    now = datetime.datetime.now().isoformat()
-    cache[cache_key] = now
-    save_cache(cache)
+    if config and "upgrade_schedule" in config:
+        schedule = config.get("upgrade_schedule", {})
+        frequency = schedule.get("frequency", "daily")
+        run_times = schedule.get("run_times", ["00:00"])
+        # Support legacy single run_time
+        if isinstance(run_times, str):
+            run_times = [run_times]
+    else:
+        frequency = os.environ.get("SCHEDULE_FREQUENCY", "daily").lower()
+        env_run_times = os.environ.get("SCHEDULE_RUN_TIMES", "00:00")
+        run_times = [t.strip() for t in env_run_times.split(",")]
 
-def should_run_upgrade(config, cache_key="last_metadata_upgrade"):
-    schedule = config.get("upgrade_schedule", {})
-    frequency = schedule.get("frequency", "daily")
-    last_run = get_last_run_time(cache_key)
     now = datetime.datetime.now()
+    current_time = f"{now.hour:02d}:{now.minute:02d}"
 
+    def match_time():
+        return current_time in run_times
+
+    if frequency == "always":
+        return True
     if frequency == "daily":
-        if not last_run or (now - last_run).days >= 1:
-            return True
+        return match_time()
     elif frequency == "twice_a_week":
-        days = schedule.get("days", [1, 4])
-        if now.weekday() in days:
-            if not last_run or last_run.date() != now.date():
-                return True
+        days = schedule.get("days", [0, 3])  # 0=Monday, 3=Thursday
+        return now.weekday() in days and match_time()
     elif frequency == "weekly":
-        if now.weekday() == schedule.get("day", 0):  # Default Monday
-            if not last_run or last_run.date() != now.date():
-                return True
+        day = schedule.get("day", 0)
+        return now.weekday() == day and match_time()
     elif frequency == "monthly":
-        times = schedule.get("times", 1)
-        if not last_run or (now - last_run).days >= (30 // times):
-            return True
+        return now.day == 1 and match_time()
     elif frequency == "custom":
         return True
     return False

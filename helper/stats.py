@@ -149,8 +149,8 @@ def summarize_metadata_completeness(
     logging.info(
         f"[Summary] {library_name}: {complete}/{total_items} completed metadata, {incomplete} incomplete metadata "
         f"({percent_complete}%)"
-        f"{asset_summary}"
     )
+    logging.info(f"[Summary] {library_name}: {asset_summary}")
     if incomplete_keys:
         logging.debug(f"[Metadata Summary] {library_name}: Incomplete entries: {incomplete_keys}")
 

@@ -21,7 +21,6 @@ async def process_item_metadata_and_assets_async(
     episode_cache=None,
     movie_cache=None,
     asset_stats=None,
-    run_upgrade=True,
     session=None,
     ignored_fields=None,
 ):
@@ -81,14 +80,14 @@ async def process_item_metadata_and_assets_async(
                 if library_type == "movie":
                     await build_movie_metadata(
                         plex_item, consolidated_metadata, dry_run,
-                        run_upgrade=run_upgrade, existing_yaml_data=existing_yaml_data, session=session,
+                        existing_yaml_data=existing_yaml_data, session=session,
                         ignored_fields=ignored_fields 
                     )
                 elif library_type == "tv":
                     await build_tv_metadata(
                         plex_item, consolidated_metadata, dry_run,
-                        run_upgrade=run_upgrade, existing_yaml_data=existing_yaml_data,
-                        season_cache=season_cache, episode_cache=episode_cache, session=session,
+                        existing_yaml_data=existing_yaml_data, season_cache=season_cache,
+                        episode_cache=episode_cache, session=session,
                         ignored_fields=ignored_fields
                     )
                 else:
@@ -186,7 +185,6 @@ async def process_library_async(
     season_cache=None, 
     episode_cache=None,
     movie_cache=None,
-    run_upgrade=True,
     session=None,
     ignored_fields=None,
     ):
@@ -229,7 +227,7 @@ async def process_library_async(
             process_item_metadata_and_assets_async(
                 item, consolidated_metadata, dry_run, existing_yaml_data, library_item_counts,
                 library_name, existing_assets, library_filesize, season_cache, episode_cache, movie_cache,
-                asset_stats, run_upgrade=run_upgrade, session=session, ignored_fields=ignored_fields
+                asset_stats, session=session, ignored_fields=ignored_fields
             )
             for item in items
         ]

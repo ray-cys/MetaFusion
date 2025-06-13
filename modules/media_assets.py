@@ -21,7 +21,6 @@ async def process_poster_for_media(
     existing_assets, 
     episode_cache=None, 
     movie_cache=None, 
-    run_upgrade=True,
     session=None,
     ):
     """
@@ -30,8 +29,7 @@ async def process_poster_for_media(
     parent_dir = (await get_plex_show_directory(item, _episode_cache=episode_cache)) if media_type == "tv" else (await get_plex_movie_directory(item, _movie_cache=movie_cache))
     asset_path = Path(config["assets_path"]) / library_name / parent_dir / "poster.jpg"
     asset_exists = asset_path.exists()
-    if not run_upgrade and asset_exists:
-        logging.info(f"[Assets] Skipping {safe_title_year(item)} poster [Scheduled upgrades not running].")
+    if asset_exists:
         existing_assets.add(str(asset_path.resolve()))
         return 0, 0
 
@@ -98,15 +96,14 @@ async def process_poster_for_media(
     existing_assets.add(str(asset_path.resolve()))
     return downloaded_size, downloaded_count
 
-async def process_season_poster(tmdb_id, season_number, item, library_name, existing_assets, episode_cache=None, run_upgrade=True, session=None):
+async def process_season_poster(tmdb_id, season_number, item, library_name, existing_assets, episode_cache=None, session=None):
     """
     Download and process the best poster for a specific TV season.
     """
     parent_dir = (await get_plex_show_directory(item, _episode_cache=episode_cache))
     asset_path = Path(config["assets_path"]) / library_name / parent_dir / f"Season{season_number:02}.jpg"
     asset_exists = asset_path.exists()
-    if not run_upgrade and asset_exists:
-        logging.info(f"[Assets] Skipping {safe_title_year(item)} Season {season_number} poster [Scheduled upgrades not running].")
+    if asset_exists:
         existing_assets.add(str(asset_path.resolve()))
         return 0, 0
     
@@ -171,15 +168,14 @@ async def process_season_poster(tmdb_id, season_number, item, library_name, exis
     existing_assets.add(str(asset_path.resolve()))
     return downloaded_size, downloaded_count
 
-async def process_background_for_media(media_type, tmdb_id, item, library_name, existing_assets, episode_cache=None, movie_cache=None, run_upgrade=True, session=None):
+async def process_background_for_media(media_type, tmdb_id, item, library_name, existing_assets, episode_cache=None, movie_cache=None, session=None):
     """
     Download and process the best background (fanart) for a Movie or TV Show item.
     """
     parent_dir = (await get_plex_show_directory(item, _episode_cache=episode_cache)) if media_type == "tv" else (await get_plex_movie_directory(item, _movie_cache=movie_cache))
     asset_path = Path(config["assets_path"]) / library_name / parent_dir / "fanart.jpg"
     asset_exists = asset_path.exists()
-    if not run_upgrade and asset_exists:
-        logging.info(f"[Assets] Skipping {safe_title_year(item)} background [Scheduled upgrades not running].")
+    if asset_exists:
         existing_assets.add(str(asset_path.resolve()))
         return 0, 0
     

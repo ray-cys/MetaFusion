@@ -37,10 +37,6 @@ cleanup_orphans: true
 # Metadata and Assets path
 metadata_path: "/path/to/metadata/"
 assets_path: "/path/to/assets/"
-upgrade_schedule:
-  frequency: "daily"        # Options: daily, twice_a_week, weekly, monthly, custom
-  days: [1, 4]              # Examples for week/month frequency: 1=Monday, 4=Thursday
-  times: 4                  # For custom: how many times per month
 
 # Poster selection preferences (Only if process_posters is true)
 poster_selection:
