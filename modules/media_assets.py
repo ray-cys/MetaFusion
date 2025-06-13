@@ -6,8 +6,8 @@ from helper.tmdb import (
     update_meta_cache, download_poster, tmdb_api_request
 )
 from helper.plex import get_plex_movie_directory, get_plex_show_directory, safe_title_year
-from helper.stats import human_readable_size
-from modules.assets import (
+from helper.logger import human_readable_size
+from modules.utils import (
     should_upgrade, generate_temp_path, get_best_poster, get_best_background
 )
 
@@ -71,7 +71,7 @@ async def process_poster_for_media(
     downloaded_count = 0
     try:
         if config.get("dry_run", False):
-            logging.info(f"[Assets Dry Run] Would process poster for {safe_title_year(item)}")
+            logging.info(f"[Dry Run] Would process poster for {safe_title_year(item)}")
             existing_assets.add(str(asset_path.resolve()))
             return 0, 0
 
@@ -144,7 +144,7 @@ async def process_season_poster(tmdb_id, season_number, item, library_name, exis
     downloaded_count = 0
     try:
         if config.get("dry_run", False):
-            logging.info(f"[Assets Dry Run] Would process season poster for {safe_title_year(item)} Season {season_number}")
+            logging.info(f"[Dry Run] Would process season poster for {safe_title_year(item)} Season {season_number}")
             existing_assets.add(str(asset_path.resolve()))
             return 0, 0
 
@@ -216,7 +216,7 @@ async def process_background_for_media(media_type, tmdb_id, item, library_name, 
     downloaded_count = 0
     try:
         if config.get("dry_run", False):
-            logging.info(f"[Assets Dry Run] Would process background for {safe_title_year(item)}")
+            logging.info(f"[Dry Run] Would process background for {safe_title_year(item)}")
             existing_assets.add(str(asset_path.resolve()))
             return 0, 0
 

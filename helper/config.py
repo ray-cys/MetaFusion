@@ -34,7 +34,7 @@ DEFAULT_CONFIG = {
     "process_season_posters": True,
     "process_backgrounds": True,
     "cleanup": {"run_by_default": True, "skip_by_default": False},
-    "cleanup_orphans": True,
+    "cleanup_processing": True,
     "metadata_path": "metadata",
     "assets_path": "assets",
     "upgrade_schedule": {

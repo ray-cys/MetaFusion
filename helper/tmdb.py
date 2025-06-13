@@ -58,7 +58,7 @@ async def tmdb_api_request(
 
     cache_hash = hashlib.sha256(cache_key.encode()).hexdigest()
     if cache and cache_hash in tmdb_response_cache:
-        logging.debug(f"[TMDb API] Returning cached response for {url} params: {params}")
+        logging.debug(f"[TMDb] Returning cached response for {url} params: {params}")
         return tmdb_response_cache[cache_hash]
 
     for attempt in range(1, retries + 1):
@@ -75,17 +75,17 @@ async def tmdb_api_request(
                         return data
                     elif response.status == 429:
                         retry_after = int(response.headers.get("Retry-After", delay))
-                        logging.warning(f"[TMDb API] Rate limited (HTTP 429). Sleeping {retry_after}s before retry...")
+                        logging.warning(f"[TMDb] Rate limited (HTTP 429). Sleeping {retry_after}s before retry...")
                         await asyncio.sleep(retry_after)
                     else:
-                        logging.warning(f"[TMDb API] Non-200 response {response.status} for {url}")
+                        logging.warning(f"[TMDb] Non-200 response {response.status} for {url}")
         except Exception as e:
-            logging.warning(f"[TMDb API] Attempt {attempt}: Request failed for URL {url}: {e}")
+            logging.warning(f"[TMDb] Attempt {attempt}: Request failed for URL {url}: {e}")
         if attempt < retries:
             sleep_time = delay * (backoff_factor ** (attempt - 1))
-            logging.info(f"[TMDb API] Retrying in {sleep_time}s... (Attempt {attempt + 1}/{retries})")
+            logging.info(f"[TMDb] Retrying in {sleep_time}s... (Attempt {attempt + 1}/{retries})")
             await asyncio.sleep(sleep_time)
-    logging.error(f"[TMDb API] Failed after {retries} attempts for {url}")
+    logging.error(f"[TMDb] Failed after {retries} attempts for {url}")
     return None
 
 async def resolve_tmdb_id(item, title, year, media_type, session=None):
@@ -108,13 +108,13 @@ async def resolve_tmdb_id(item, title, year, media_type, session=None):
     if cache_key in cache:
         cache_entry = cache[cache_key]
         if isinstance(cache_entry, dict):
-            logging.debug(f"[TMDb Resolution] TMDb ID found in cache for {title} ({year}): {cache_entry.get('tmdb_id')}")
+            logging.debug(f"[TMDb] TMDb ID found in cache for {title} ({year}): {cache_entry.get('tmdb_id')}")
             return cache_entry.get('tmdb_id')
         else:
-            logging.debug(f"[TMDb Resolution] TMDb ID found in cache for {title} ({year}): {cache_entry}")
+            logging.debug(f"[TMDb] TMDb ID found in cache for {title} ({year}): {cache_entry}")
             return cache_entry
     if cache_key in failed_cache:
-        logging.warning(f"[TMDb Resolution] Skipping repeated failed lookup for {title} ({year})")
+        logging.warning(f"[TMDb] Skipping repeated failed lookup for {title} ({year})")
         return None
 
     tmdb_id = None
@@ -124,7 +124,7 @@ async def resolve_tmdb_id(item, title, year, media_type, session=None):
             guid_id = guid.id
             if "tmdb" in guid_id:
                 tmdb_id = guid_id.split("://")[1].split("?")[0]
-                logging.debug(f"[TMDb Resolution] TMDb ID extracted directly from Plex GUID: {tmdb_id}")
+                logging.debug(f"[TMDb] TMDb ID extracted directly from Plex GUID: {tmdb_id}")
                 break
 
     if tmdb_id:
@@ -146,11 +146,11 @@ async def resolve_tmdb_id(item, title, year, media_type, session=None):
     if tmdb_id:
         cache[cache_key] = {"tmdb_id": tmdb_id}
         save_cache(cache)
-        logging.debug(f"[TMDb Resolution] TMDb ID resolved and cached for {title} ({year}): {tmdb_id}")
+        logging.debug(f"[TMDb] TMDb ID resolved and cached for {title} ({year}): {tmdb_id}")
     else:
         failed_cache[cache_key] = True
         save_failed_cache(failed_cache)
-        logging.warning(f"[TMDb Resolution] Could not resolve TMDb ID for {title} ({year}) after all attempts.")
+        logging.warning(f"[TMDb] Could not resolve TMDb ID for {title} ({year}) after all attempts.")
 
     return tmdb_id
 
@@ -161,7 +161,7 @@ async def tmdb_find_id(title, year, media_type, session=None):
     if session is None:
         raise ValueError("An aiohttp session must be passed to tmdb_find_id")
 
-    logging.debug(f"[TMDb Search] Searching for Title: {title}, Year: {year}, Type: {media_type}")
+    logging.debug(f"[TMDb] Searching for Title: {title}, Year: {year}, Type: {media_type}")
     endpoint = f"search/{media_type}"
     params = {
         "query": title,
@@ -179,47 +179,42 @@ async def tmdb_find_id(title, year, media_type, session=None):
             reverse=True
         )[0]
         tmdb_id = best_result.get("id")
-        logging.debug(f"[TMDb API] TMDb ID found: {tmdb_id} for {title} ({year})")
+        logging.debug(f"[TMDb] TMDb ID found: {tmdb_id} for {title} ({year})")
         return tmdb_id
-    logging.debug(f"[TMDb API] No results found for {title} ({year})")
+    logging.debug(f"[TMDb] No results found for {title} ({year})")
     return None
 
 async def download_poster(image_path, save_path, item=None, session=None):
     from helper.plex import safe_title_year
-    from modules.assets import save_poster
+    from modules.utils import save_poster
     """
     Download a poster image from TMDb and save it to the specified path.
     """
     if session is None:
         raise ValueError("An aiohttp session must be passed to download_poster")
-
     try:
         url = f"https://image.tmdb.org/t/p/original{image_path}"
-        logging.debug(f"[Assets Download] Downloading {safe_title_year(item)} poster from URL: {url}")
-
+        logging.debug(f"[Assets] Downloading {safe_title_year(item)} poster from URL: {url}")
         if save_path.exists() and not config.get("dry_run", False):
-            logging.info(f"[Assets Download] Poster {safe_title_year(item)} already exists. Skipping download.")
+            logging.info(f"[Assets] Poster {safe_title_year(item)} already exists. Skipping download.")
             return True
-
         if config.get("dry_run", False):
-            logging.info(f"[Assets Dry Run] Would download {safe_title_year(item)} from {url}")
+            logging.info(f"[Dry Run] Would download {safe_title_year(item)} from {url}")
             return True 
-
         response_content = await tmdb_api_request(url, raw=True, cache=False, session=session)
         if not response_content:
-            logging.warning(f"[Assets Download] Failed to download image for {safe_title_year(item)}")
+            logging.warning(f"[Assets] Failed to download image for {safe_title_year(item)}")
             return False
-
         try:
             await save_poster(response_content, save_path, item)
-            logging.debug(f"[Assets Download] Downloaded poster for {safe_title_year(item)}")
+            logging.debug(f"[Assets] Downloaded poster for {safe_title_year(item)}")
             return True
         except Exception as e:
-            logging.warning(f"[Assets Download] Failed to save poster for {safe_title_year(item)}: {e}")
+            logging.warning(f"[Assets] Failed to save poster for {safe_title_year(item)}: {e}")
             return False
 
     except Exception as e:
-        logging.warning(f"[Assets Download] Failed to process poster download for {safe_title_year(item)}: {e}")
+        logging.warning(f"[Assets] Failed to process poster download for {safe_title_year(item)}: {e}")
         return False
 
 def update_meta_cache(cache_key, tmdb_id, title, year, media_type, **kwargs):

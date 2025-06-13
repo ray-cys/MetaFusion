@@ -7,7 +7,6 @@ def get_plex_libraries(plex):
     Retrieve a list of Plex libraries with their titles and types.
     """
     try:
-        # Batch fetch all sections once
         sections = list(plex.library.sections())
         libraries = [{"title": section.title, "type": section.TYPE} for section in sections]
         logging.info(f"[Plex] Detected Libraries: {[lib['title'] for lib in libraries]}")

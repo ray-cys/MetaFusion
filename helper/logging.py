@@ -78,3 +78,9 @@ def meta_summary_banner(logger=None, width=50):
     else:
         for line in lines:
             print(line)
+            
+def human_readable_size(size, decimal_places=2):
+    for unit in ['bytes', 'KB', 'MB', 'GB', 'TB']:
+        if size < 1024.0 or unit == 'TB':
+            return f"{size:.{decimal_places}f} {unit}"
+        size /= 1024.0
