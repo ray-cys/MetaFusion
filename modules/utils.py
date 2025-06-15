@@ -151,6 +151,33 @@ def get_best_background(
     logging.debug(f"[Assets] Selected any available background as final fallback: {best}")
     return best
 
+def smart_meta_update(existing_metadata, new_metadata):
+    """
+    Compare existing and new metadata, returning a list of changed fields.
+    """
+    changed_fields = []
+    for key, new_value in new_metadata.items():
+        existing_value = existing_metadata.get(key)
+        if isinstance(new_value, list):
+            if not isinstance(existing_value, list):
+                changed_fields.append(key)
+            else:
+                normalized_existing = sorted([str(item) for item in existing_value])
+                normalized_new = sorted([str(item) for item in new_value])
+                if normalized_existing != normalized_new:
+                    changed_fields.append(key)
+        elif isinstance(new_value, dict):
+            if not isinstance(existing_value, dict):
+                changed_fields.append(key)
+            else:
+                nested_changes = smart_meta_update(existing_value, new_value)
+                if nested_changes:
+                    changed_fields.append(key)
+        else:
+            if str(existing_value or "").strip() != str(new_value or "").strip():
+                changed_fields.append(key)
+    return changed_fields
+
 def should_upgrade(
     asset_path,
     new_image_data,
@@ -170,7 +197,6 @@ def should_upgrade(
     label = safe_title_year(item)
     if season_number is not None:
         label = f"{label} Season {season_number}"
-
     if asset_type == "background":
         vote_threshold = config["background_selection"].get("vote_average_threshold", 5.0)
         cache_key_name = "bg_average"
@@ -245,23 +271,19 @@ async def save_poster(image_content, save_path, item=None):
         if save_path.exists():
             with open(save_path, "rb") as existing_file:
                 existing_checksum = hashlib.md5(existing_file.read()).hexdigest()
-            
             if existing_checksum == new_checksum:
                 logging.info(f"[Assets] No changes detected for {safe_title_year(item)}. Skipping save.")
                 return
             else:
                 logging.info(f"[Assets] Checksum difference detected for {safe_title_year(item)}. Proceeding to update.")
-
         if config.get("dry_run", False):
-            logging.info(f"[Assets Dry Run] Would save poster for {safe_title_year(item)}")
+            logging.info(f"[Dry Run] Would save poster for {safe_title_year(item)}")
             return
-
         save_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Use async file write for compatibility with async context
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, save_path.write_bytes, image_content)
-
         logging.debug(f"[Assets] Poster saved successfully for {safe_title_year(item)}")
 
     except Exception as e:

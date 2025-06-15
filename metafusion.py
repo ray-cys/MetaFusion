@@ -3,9 +3,8 @@ import time
 import asyncio
 import aiohttp
 from helper.config import load_config, log_disabled_features
-from helper.logging import setup_logging, meta_banner, meta_summary_banner
+from helper.logging import setup_logging, meta_banner, meta_summary_banner, human_readable_size
 from helper.plex import get_plex_libraries
-from helper.stats import human_readable_size
 
 config = load_config()
 logger = setup_logging(config)
@@ -26,17 +25,17 @@ if __name__ == "__main__":
             try:
                 try:
                     plex = PlexServer(config["plex"]["url"], config["plex"]["token"])
-                    logger.info("[Startup] Successfully connected to Plex.")
+                    logger.info("[Plex] Successfully connected to Plex.")
                 except Exception as e:
-                    logger.error(f"[Startup] Failed to connect to Plex: {e}")
+                    logger.error(f"[Plex] Failed to connect to Plex: {e}")
                     sys.exit(1)
 
                 libraries = get_plex_libraries(plex)
                 if not libraries:
-                    logger.warning("[Startup] No Plex libraries found. Exiting.")
+                    logger.warning("[Plex] No Plex libraries found. Exiting.")
                     sys.exit(0)
 
-                cleanup_orphans_flag = config.get("cleanup_orphans", True)
+                cleanup_orphans_flag = config.get("cleanup_processing", True)
                 metadata_summaries = {}
                 library_filesize = {}
 
@@ -45,7 +44,7 @@ if __name__ == "__main__":
                 for lib in libraries:
                     library_name = lib.get("title")
                     if library_name not in selected_libraries:
-                        logger.info(f"[Library Skip] Skipping library: {library_name}")
+                        logger.info(f"[Plex] Skipping library: {library_name}")
                         continue
 
                     movie_cache = {}
@@ -70,7 +69,7 @@ if __name__ == "__main__":
                 if tasks:
                     await asyncio.gather(*tasks)
                 else:
-                    logger.info("[Metadata] No libraries scheduled to process.")
+                    logger.info("[Plex] No libraries scheduled to process.")
 
                 # Clean up orphaned metadata and assets (configurable in config)
                 orphans_removed = 0
@@ -86,7 +85,7 @@ if __name__ == "__main__":
                 minutes, seconds = divmod(int(elapsed_time), 60)
 
                 meta_summary_banner(logger)
-                logger.info(f"[Summary] Processing completed in {minutes} minutes {seconds} seconds.")
+                logger.info(f"[Summary] Processing completed in {minutes} mins {seconds} secs.")
 
                 skipped_libraries = [lib.get("title") for lib in libraries if lib.get("title") not in selected_libraries]
                 logger.info(
@@ -96,27 +95,27 @@ if __name__ == "__main__":
                 processed_count = sum(library_item_counts.values())
                 logger.info(f"[Summary] Total items processed: {processed_count}")
 
-                logger.info("[Per-Library Metadata Counts ]")
+                logger.info("[ Per-Library Metadata Counts ]")
                 for lib_name, count in library_item_counts.items():
                     logger.info(f"  - {lib_name}: {count} items processed")
 
-                logger.info("[Per-Library Metadata Stats]")
+                logger.info("[ Per-Library Metadata Stats ]")
                 for lib_name, summary in metadata_summaries.items():
                     logger.info(
-                        f"  - {lib_name}: {summary['complete']}/{summary['total_items']} complete, {summary['incomplete']} incomplete"
-                        f", {summary['percent_complete']}% complete"
+                        f"  - {lib_name}: {summary['complete']}/{summary['total_items']}, {summary['percent_complete']}% complete, "
+                        f"{summary['incomplete']} incomplete"
                     )
 
-                logger.info("[Per-Library Downloaded Asset Size]")
+                logger.info("[ Per-Library Downloaded Asset Size ]")
                 for lib_name, size in library_filesize.items():
-                    logger.info(f"  - {lib_name}: {human_readable_size(size)}")
+                    logger.info(f"  - {lib_name}: Total {human_readable_size(size)}")
                 total_asset_size = sum(library_filesize.values())
-                logger.info(f"[Summary] Total assets downloaded: {human_readable_size(total_asset_size)}")
+                logger.info(f"  - Total assets downloaded: {human_readable_size(total_asset_size)}")
 
-                logger.info("[Total Cleanup Stats]")
+                logger.info("[ Total Cleanup Stats ]")
                 if cleanup_orphans_flag:
-                    logger.info(f"  - Titles Removed (Orphans): {orphans_removed}")
-                logger.info("=" * 60)
+                    logger.info(f"  - Titles removed from MetaFusion: {orphans_removed}")
+                logger.info("=" * 50)
 
                 if config.get("dry_run", False):
                     logger.info("[Dry Run] Completed. No files were written.")

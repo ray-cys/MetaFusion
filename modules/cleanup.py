@@ -10,7 +10,7 @@ async def cleanup_orphans(plex, libraries=None, asset_path=None, existing_assets
     from ruamel.yaml import YAML
     import asyncio
 
-    logging.info("[Cleanup] Starting orphan cleanup...")
+    logging.info("[Cleanup] Starting titles cleanup...")
 
     movie_cache = {}
     episode_cache = {}
@@ -42,8 +42,8 @@ async def cleanup_orphans(plex, libraries=None, asset_path=None, existing_assets
                     global_valid_cache_keys.add(f"movie:{title}:{year}")
                 global_existing_titles.add(f"{title} ({year})")
 
-    # Metadata orphan cleanup (TMDb cache)
-    cache = load_cache()  # Always load fresh cache
+    # TMDb cache cleanup
+    cache = load_cache()
     cache_keys_to_remove = [
         key for key in list(cache.keys())
         if key not in global_valid_cache_keys
@@ -51,7 +51,7 @@ async def cleanup_orphans(plex, libraries=None, asset_path=None, existing_assets
     for key in cache_keys_to_remove:
         del cache[key]
         orphans_removed += 1
-        logging.info(f"[Cleanup] Removed orphaned cache entry: {key}")
+        logging.info(f"[Cleanup] Removed cache entry: {key}")
     save_cache(cache)
 
     # YAML metadata cleanup
@@ -61,7 +61,7 @@ async def cleanup_orphans(plex, libraries=None, asset_path=None, existing_assets
     }
     for metadata_file in Path(config["metadata_path"]).glob("*.yml"):
         if metadata_file.name not in preferred_filenames:
-            logging.info(f"[Cleanup] Skipping non-preferred library file: {metadata_file.name}")
+            logging.info(f"[Cleanup] Skipping non-preferred library: {metadata_file.name}")
             continue
         try:
             with open(metadata_file, "r", encoding="utf-8") as f:
@@ -74,19 +74,18 @@ async def cleanup_orphans(plex, libraries=None, asset_path=None, existing_assets
             orphans_in_file = len(metadata_entries) - len(cleaned_metadata)
             orphans_removed += orphans_in_file
 
-            # Only write if orphans were actually removed
             if orphans_in_file > 0:
                 metadata_content["metadata"] = cleaned_metadata
                 with open(metadata_file, "w", encoding="utf-8") as f:
                     yaml.default_flow_style = False
                     yaml.allow_unicode = True
                     yaml.dump(metadata_content, f)
-                logging.info(f"[Cleanup] Removed {orphans_in_file} orphans from {metadata_file.name}")
+                logging.info(f"[Cleanup] Removed {orphans_in_file} from {metadata_file.name}")
 
         except Exception as e:
             logging.error(f"[Cleanup] Failed processing {metadata_file}: {e}")
 
-    # Asset orphan cleanup (parallelized)
+    # Asset orphan cleanup
     if asset_path:
         valid_asset_dirs = set()
         for section in plex_sections:
@@ -111,28 +110,29 @@ async def cleanup_orphans(plex, libraries=None, asset_path=None, existing_assets
                 logging.info(f"[Cleanup] Skipping in-use {description}: {path}")
                 return
             action_msg = "[Dry Run] Would remove" if config.get("dry_run", False) else "Removing"
-            logging.info(f"[Cleanup] {action_msg} orphaned {description}: {path}")
+            logging.info(f"[Cleanup] {action_msg} cleanup {description}: {path}")
             if not config.get("dry_run", False):
                 try:
                     await asyncio.to_thread(path.unlink)
                     orphans_removed += 1
-                    # Remove empty parent directory if needed
                     if not any(path.parent.iterdir()):
                         parent_action_msg = "[Dry Run] Would remove" if config.get("dry_run", False) else "Removing"
                         logging.info(f"[Cleanup] {parent_action_msg} empty directory: {path.parent}")
                         await asyncio.to_thread(path.parent.rmdir)
                 except Exception as e:
-                    logging.warning(f"[Cleanup] Failed to remove orphaned {description} {path}: {e}")
+                    logging.warning(f"[Cleanup] Failed to remove {description} {path}: {e}")
 
-        # Gather all orphaned files to remove
+        # Cleanup orphaned all assets at once
         orphaned_posters = [p for p in Path(asset_path).rglob("poster.jpg")]
         orphaned_season_posters = [p for p in Path(asset_path).rglob("Season*.jpg")]
-
+        orphaned_backgrounds = [p for p in Path(asset_path).rglob("fanart.jpg")]
+            
         await asyncio.gather(
             *(remove_orphaned_file(p, "poster") for p in orphaned_posters),
             *(remove_orphaned_file(p, "season poster") for p in orphaned_season_posters),
+            *(remove_orphaned_file(p, "background") for p in orphaned_backgrounds),
         )
-        logging.info(f"[Cleanup] Asset orphan cleanup complete.")
+        logging.info(f"[Cleanup] Asset cleanup complete.")
 
-    logging.info(f"[Cleanup] Total orphans removed: {orphans_removed}")
+    logging.info(f"[Cleanup] Total titles removed: {orphans_removed}")
     return orphans_removed
