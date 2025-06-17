@@ -64,7 +64,7 @@ DEFAULT_CONFIG = {
 
 def log_disabled_features(config, logger):
     """
-    Log which major processing features are disabled in the config.
+    Log which processing features are disabled in the config.
     """
     features = [
         ("process_metadata", "Metadata Extraction"),
@@ -75,7 +75,7 @@ def log_disabled_features(config, logger):
     ]
     for key, desc in features:
         if not config.get(key, True):
-            logger.info(f"[Config] {desc} is DISABLED in config and will not run.")
+            logger.info(f"[Config] {desc} is DISABLED and will not run.")
 
 def warn_unknown_keys(user_cfg, default_cfg, parent_key=""):
     """
@@ -105,7 +105,6 @@ def deep_merge_dicts(default, user):
 def apply_env_overrides(config, prefix=""):
     """
     Recursively override config values with environment variables.
-    For nested keys, use underscores, e.g., PLEX_URL, ASSETS_PATH.
     """
     for key, value in config.items():
         env_key = (prefix + "_" + key).upper() if prefix else key.upper()
@@ -132,7 +131,7 @@ def apply_env_overrides(config, prefix=""):
 
 def load_config():
     """
-    Load the configuration from config.yml, merging it with the default configuration,
+    Load the configuration from config.yml, merge with default configuration,
     and override any value with environment variables if present.
     """
     config = DEFAULT_CONFIG.copy()

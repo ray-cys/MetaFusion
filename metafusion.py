@@ -1,23 +1,23 @@
 import sys
-import time
 import asyncio
 import aiohttp
+from datetime import datetime
+from plexapi.server import PlexServer
 from helper.config import load_config, log_disabled_features
-from helper.logging import setup_logging, meta_banner, meta_summary_banner, human_readable_size
-from helper.plex import get_plex_libraries
+from helper.logging import setup_logging, meta_banner, check_requirements, log_summary_report
+from modules.processing import process_library
+from modules.cleanup import cleanup_orphans
 
 config = load_config()
 logger = setup_logging(config)
 
 if __name__ == "__main__":
-    from plexapi.server import PlexServer
-    from modules.processing import process_library_async
-    from modules.cleanup import cleanup_orphans
-
     async def main():
         meta_banner(logger)
+        logger.info(f"[MetaFusion] Started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        check_requirements(logger)
         log_disabled_features(config, logger)
-        start_time = time.time()
+        start_time = datetime.now()
         library_item_counts = {}
         selected_libraries = config.get("preferred_libraries", ["Movies", "TV Shows"])
 
@@ -25,26 +25,34 @@ if __name__ == "__main__":
             try:
                 try:
                     plex = PlexServer(config["plex"]["url"], config["plex"]["token"])
-                    logger.info("[Plex] Successfully connected to Plex.")
+                    logger.debug("[MetaFusion] Successfully connected to Plex.")
                 except Exception as e:
-                    logger.error(f"[Plex] Failed to connect to Plex: {e}")
+                    logger.error(f"[MetaFusion] Failed to connect to Plex: {e}")
+                    sys.exit(1)
+                
+                try:
+                    sections = list(plex.library.sections())
+                except Exception as e:
+                    logger.error(f"[MetaFusion] Failed to retrieve Plex libraries: {e}", exc_info=True)
                     sys.exit(1)
 
-                libraries = get_plex_libraries(plex)
-                if not libraries:
-                    logger.warning("[Plex] No Plex libraries found. Exiting.")
+                libraries = [{"title": section.title, "type": section.TYPE} for section in sections]
+                logger.info(f"[MetaFusion] Detected Plex libraries: {[lib['title'] for lib in libraries]}")
+
+                if not sections:
+                    logger.warning("[MetaFusion] No Plex libraries found. Exiting.")
                     sys.exit(0)
 
                 cleanup_orphans_flag = config.get("cleanup_processing", True)
                 metadata_summaries = {}
                 library_filesize = {}
 
-                # Prepare to process libraries
+                # Processing libraries
                 tasks = []
-                for lib in libraries:
-                    library_name = lib.get("title")
+                for section in libraries:
+                    library_name = section.title
                     if library_name not in selected_libraries:
-                        logger.info(f"[Plex] Skipping library: {library_name}")
+                        logger.info(f"[MetaFusion] Skipping Plex library: {library_name}")
                         continue
 
                     movie_cache = {}
@@ -52,9 +60,8 @@ if __name__ == "__main__":
                     episode_cache = {}
 
                     tasks.append(
-                        process_library_async(
-                            plex=plex,
-                            library_name=library_name,
+                        process_library(
+                            library_section=section,
                             dry_run=config.get("dry_run", False),
                             library_item_counts=library_item_counts,
                             metadata_summaries=metadata_summaries,
@@ -69,62 +76,38 @@ if __name__ == "__main__":
                 if tasks:
                     await asyncio.gather(*tasks)
                 else:
-                    logger.info("[Plex] No libraries scheduled to process.")
+                    logger.info("[MetaFusion] No libraries scheduled to process.")
 
-                # Clean up orphaned metadata and assets (configurable in config)
+                # Clean up metadata and assets
                 orphans_removed = 0
                 if cleanup_orphans_flag:
                     orphans_removed = await cleanup_orphans(
                         plex,
-                        libraries=[lib.get("title") for lib in libraries if lib.get("title") in selected_libraries],
+                        libraries=[section.title for section in libraries if section.title in selected_libraries],
                         asset_path=config["assets_path"],
                     )
 
                 # Final summary report
-                elapsed_time = time.time() - start_time
-                minutes, seconds = divmod(int(elapsed_time), 60)
-
-                meta_summary_banner(logger)
-                logger.info(f"[Summary] Processing completed in {minutes} mins {seconds} secs.")
-
-                skipped_libraries = [lib.get("title") for lib in libraries if lib.get("title") not in selected_libraries]
-                logger.info(
-                    f"[Summary] Libraries processed: {len(library_item_counts)} | "
-                    f"skipped: {', '.join(skipped_libraries) if skipped_libraries else 'None'}"
+                end_time = datetime.now()
+                elapsed_time = (end_time - start_time).total_seconds()
+                log_summary_report(
+                    logger,
+                    elapsed_time,
+                    library_item_counts,
+                    metadata_summaries,
+                    library_filesize,
+                    orphans_removed,
+                    cleanup_orphans_flag,
+                    selected_libraries,
+                    libraries,
+                    config
                 )
-                processed_count = sum(library_item_counts.values())
-                logger.info(f"[Summary] Total items processed: {processed_count}")
-
-                logger.info("[ Per-Library Metadata Counts ]")
-                for lib_name, count in library_item_counts.items():
-                    logger.info(f"  - {lib_name}: {count} items processed")
-
-                logger.info("[ Per-Library Metadata Stats ]")
-                for lib_name, summary in metadata_summaries.items():
-                    logger.info(
-                        f"  - {lib_name}: {summary['complete']}/{summary['total_items']}, {summary['percent_complete']}% complete, "
-                        f"{summary['incomplete']} incomplete"
-                    )
-
-                logger.info("[ Per-Library Downloaded Asset Size ]")
-                for lib_name, size in library_filesize.items():
-                    logger.info(f"  - {lib_name}: Total {human_readable_size(size)}")
-                total_asset_size = sum(library_filesize.values())
-                logger.info(f"  - Total assets downloaded: {human_readable_size(total_asset_size)}")
-
-                logger.info("[ Total Cleanup Stats ]")
-                if cleanup_orphans_flag:
-                    logger.info(f"  - Titles removed from MetaFusion: {orphans_removed}")
-                logger.info("=" * 50)
-
-                if config.get("dry_run", False):
-                    logger.info("[Dry Run] Completed. No files were written.")
             except Exception as e:
-                logger.error(f"[Fatal] Unhandled exception in main: {e}", exc_info=True)
+                logger.error(f"[Fatal Error] Unhandled exception in main: {e}", exc_info=True)
                 sys.exit(1)
 
     try:
         asyncio.run(main())
     except Exception as e:
-        logger.error(f"[Fatal] Unhandled exception: {e}", exc_info=True)
+        logger.error(f"[Fatal Error] Unhandled exception: {e}", exc_info=True)
         sys.exit(1)

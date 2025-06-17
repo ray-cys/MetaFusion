@@ -2,102 +2,123 @@ import asyncio
 import logging
 from pathlib import Path
 
-def get_plex_libraries(plex):
-    """
-    Retrieve a list of Plex libraries with their titles and types.
-    """
-    try:
-        sections = list(plex.library.sections())
-        libraries = [{"title": section.title, "type": section.TYPE} for section in sections]
-        logging.info(f"[Plex] Detected Libraries: {[lib['title'] for lib in libraries]}")
-        return libraries
-    except Exception as e:
-        logging.error(f"[Plex] Failed to retrieve libraries: {e}")
-        return []
+_plex_cache = {}
 
-async def get_existing_plex_seasons_episodes(plex_item, _season_cache=None, _episode_cache=None):
+async def plex_metadata(item, _season_cache=None, _episode_cache=None, _movie_cache=None):
     """
-    Get a mapping of seasons to episode numbers for a given Plex TV show item.
-    Uses in-memory cache to avoid repeated API calls for the same item.
-    Runs heavy PlexAPI calls in a thread to avoid blocking the event loop.
+    Extract and cache Plex metadata for a given item.
+    Uses aggressive in-memory cache.
     """
+    global _plex_cache
     if _season_cache is None:
         _season_cache = {}
     if _episode_cache is None:
         _episode_cache = {}
-
-    item_key = getattr(plex_item, 'ratingKey', id(plex_item))
-    if item_key in _season_cache:
-        seasons = _season_cache[item_key]
-    else:
-        seasons = await asyncio.to_thread(lambda: list(plex_item.seasons()))
-        _season_cache[item_key] = seasons
-
-    seasons_episodes = {}
-    for season in seasons:
-        season_key = getattr(season, 'ratingKey', id(season))
-        if season_key in _episode_cache:
-            episodes = _episode_cache[season_key]
-        else:
-            episodes = await asyncio.to_thread(lambda: list(season.episodes()))
-            _episode_cache[season_key] = episodes
-        episode_numbers = [ep.episodeNumber for ep in episodes]
-        seasons_episodes[season.index] = episode_numbers
-    return seasons_episodes
-
-async def get_plex_movie_directory(item, _movie_cache=None):
-    """
-    Get the directory name containing the movie file for a Plex movie item.
-    Uses in-memory cache to avoid repeated API calls for the same item.
-    Runs heavy PlexAPI calls in a thread to avoid blocking the event loop.
-    """
     if _movie_cache is None:
         _movie_cache = {}
-    try:
-        item_key = getattr(item, 'ratingKey', id(item))
-        if item_key in _movie_cache:
-            parts = _movie_cache[item_key]
-        else:
-            parts = await asyncio.to_thread(lambda: list(item.iterParts())) if hasattr(item, 'iterParts') else []
-            _movie_cache[item_key] = parts
-        if parts:
-            file_path = parts[0].file
-            return Path(file_path).parent.name
-    except Exception as e:
-        logging.warning(f"[Plex] Failed to extract Plex directory name for {safe_title_year(item)}: {e}")
-    # Fallback to title and year if extraction fails
-    return f"{getattr(item, 'title', 'Unknown')} ({getattr(item, 'year', 'Unknown')})"
 
-async def get_plex_show_directory(item, _episode_cache=None):
-    """
-    Get the directory name containing the show files for a Plex TV show item.
-    Uses in-memory cache to avoid repeated API calls for the same item.
-    Runs heavy PlexAPI calls in a thread to avoid blocking the event loop.
-    """
-    if _episode_cache is None:
-        _episode_cache = {}
+    item_key = getattr(item, 'ratingKey', id(item))
+    if item_key in _plex_cache:
+        return _plex_cache[item_key]
 
-    try:
-        if hasattr(item, 'episodes'):
-            item_key = getattr(item, 'ratingKey', id(item))
+    # Library info
+    library_section = getattr(item, "librarySection", None)
+    library_name = getattr(library_section, "title", None) or "Unknown"
+    library_type = (getattr(library_section, "type", None) or getattr(item, "type", None) or "unknown").lower()
+    if library_type == "show":
+        library_type = "tv"
+
+    # Basic info
+    title = getattr(item, "title", None)
+    year = getattr(item, "year", None)
+    title_year = f"{title} ({year})" if title and year else None
+    ratingKey = getattr(item, "ratingKey", None)
+
+    # GUIDs
+    tmdb_id = imdb_id = tvdb_id = None
+    for guid in getattr(item, "guids", []):
+        if guid.id.startswith("tmdb://"):
+            tmdb_id = guid.id.split("://")[1].split("?")[0]
+        elif guid.id.startswith("imdb://"):
+            imdb_id = guid.id.split("://")[1].split("?")[0]
+        elif guid.id.startswith("tvdb://"):
+            tvdb_id = guid.id.split("://")[1].split("?")[0]
+
+    # Movie path
+    movie_path = None
+    if library_type == "movie" or hasattr(item, "iterParts"):
+        try:
+            if item_key in _movie_cache:
+                parts = _movie_cache[item_key]
+            else:
+                parts = await asyncio.to_thread(lambda: list(item.iterParts())) if hasattr(item, 'iterParts') else []
+                _movie_cache[item_key] = parts
+            if parts:
+                file_path = parts[0].file
+                movie_path = Path(file_path).parent.name
+        except Exception as e:
+            logging.warning(f"[Plex] Failed to extract movie directory for {title} ({year}): {e}")
+
+    # Show path
+    show_path = None
+    if library_type in ("show", "tv") or hasattr(item, "episodes"):
+        try:
             if item_key in _episode_cache:
                 episodes = _episode_cache[item_key]
             else:
-                episodes = await asyncio.to_thread(lambda: list(item.episodes()))
+                episodes = await asyncio.to_thread(lambda: list(item.episodes())) if hasattr(item, 'episodes') else []
                 _episode_cache[item_key] = episodes
+            found = False
             for episode in episodes:
                 for media in getattr(episode, 'media', []):
                     for part in getattr(media, 'parts', []):
                         file_path = Path(part.file)
-                        return file_path.parent.parent.name
-    except Exception as e:
-        logging.warning(f"[Plex] Failed to extract Plex show directory for {safe_title_year(item)}: {e}")
-    return f"{getattr(item, 'title', 'Unknown')} ({getattr(item, 'year', 'Unknown')})"
+                        show_path = file_path.parent.parent.name
+                        found = True
+                        break
+                    if found:
+                        break
+                if found:
+                    break
+        except Exception as e:
+            logging.warning(f"[Plex] Failed to extract show directory for {title} ({year}): {e}")
 
-def safe_title_year(item):
-    """
-    Safely get the title and year string for a Plex item.
-    """
-    title = getattr(item, "title", None) or "Unknown Title"
-    year = getattr(item, "year", None) or "Unknown Year"
-    return f"{title} ({year})"
+    # Seasons to episodes mapping
+    seasons_episodes = None
+    if library_type in ("show", "tv") or hasattr(item, "seasons"):
+        try:
+            if item_key in _season_cache:
+                seasons = _season_cache[item_key]
+            else:
+                seasons = await asyncio.to_thread(lambda: list(item.seasons())) if hasattr(item, 'seasons') else []
+                _season_cache[item_key] = seasons
+
+            seasons_episodes = {}
+            for season in seasons:
+                season_key = getattr(season, 'ratingKey', id(season))
+                if season_key in _episode_cache:
+                    episodes = _episode_cache[season_key]
+                else:
+                    episodes = await asyncio.to_thread(lambda: list(season.episodes()))
+                    _episode_cache[season_key] = episodes
+                episode_numbers = [ep.episodeNumber for ep in episodes]
+                seasons_episodes[season.index] = episode_numbers
+        except Exception as e:
+            logging.warning(f"[Plex] Failed to extract seasons/episodes for {title} ({year}): {e}")
+
+    # Build result and cache into memory
+    result = {
+        "library_name": library_name,
+        "library_type": library_type,
+        "title": title,
+        "year": year,
+        "ratingKey": ratingKey,
+        "tmdb_id": tmdb_id,
+        "imdb_id": imdb_id,
+        "tvdb_id": tvdb_id,
+        "movie_path": movie_path,
+        "show_path": show_path,
+        "seasons_episodes": seasons_episodes,
+    }
+    _plex_cache[item_key] = result
+    return result

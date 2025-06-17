@@ -4,11 +4,7 @@ import asyncio
 from pathlib import Path
 from helper.config import load_config
 from helper.tmdb import (
-    tmdb_api_request, resolve_tmdb_id, update_meta_cache, tmdb_response_cache,
-    download_poster
-)
-from helper.plex import (
-    get_existing_plex_seasons_episodes, get_plex_movie_directory, get_plex_show_directory, safe_title_year
+    tmdb_api_request, meta_cache, tmdb_response_cache, download_poster
 )
 from modules.utils import (
     should_upgrade, smart_meta_update, generate_temp_path, get_best_poster, get_best_background
@@ -26,13 +22,12 @@ async def build_movie(
     ignored_fields=None,
     existing_assets=None,
     library_name=None,
-    movie_cache=None
+    meta=None
 ):
     import pycountry
     """
-    Build and consolidate metadata for a movie Plex item using TMDb data.
-    Always checks and processes assets (poster/background), even if metadata is unchanged.
-    Returns a dict with percent and asset sizes.
+    Build metadata and assets for a movie Plex item using TMDb data.
+    Upgrades existing metadata or assets if needed.
     """
     if not config.get("process_metadata", True):
         return
@@ -41,10 +36,11 @@ async def build_movie(
         ignored_fields = set()
     if existing_assets is None:
         existing_assets = set()
-    title = getattr(plex_item, "title", "Unknown")
-    year = getattr(plex_item, "year", "Unknown")
+    title = meta.get("title", "Unknown") if meta else None
+    year = meta.get("year", "Unknown") if meta else None
+    movie_path = meta.get("movie_path") if meta else None
+    tmdb_id = meta.get("tmdb_id") if meta else None
     full_title = f"{title} ({year})"
-    tmdb_id = await resolve_tmdb_id(plex_item, title, year, "movie", session=session)
     imdb_id_for_mapping = ""
     mapping_id = ""
 
@@ -64,7 +60,7 @@ async def build_movie(
                     tmdb_id = movie_id
         mapping_id = imdb_id_for_mapping or ""
         if not tmdb_id or not mapping_id:
-            logging.warning(f"[Metadata] No TMDb or IMDb ID found for {full_title}. Skipping...")
+            logging.warning(f"[Movie] No TMDb or IMDb ID found for {full_title}. Skipping...")
             return
     else:
         mapping_id = int(tmdb_id)
@@ -85,7 +81,7 @@ async def build_movie(
         if details:
             tmdb_response_cache[details_key] = details
         else:
-            logging.warning(f"[Metadata] No TMDb data found for {full_title}. Skipping...")
+            logging.warning(f"[Movie] No TMDb data found for {full_title}. Skipping...")
             return
 
     # Extract content rating (US certification)
@@ -115,7 +111,10 @@ async def build_movie(
 
     # Collection/franchise info
     collection_info = details.get("belongs_to_collection")
-    collection = collection_info.get("name", "") if collection_info else ""
+    collection = ""
+    if collection_info:
+        name = collection_info.get("name", "")
+        collection = name.removesuffix(" Collection")
 
     # Crew roles
     director_jobs = {"Director", "Co-Director", "Assistant Director"}
@@ -183,10 +182,10 @@ async def build_movie(
         existing_metadata = existing_yaml_data.get("metadata", {}).get(full_title, {})
         changes = smart_meta_update(existing_metadata, new_metadata)
         if not changes:
-            logging.info(f"[Metadata] No changes for {full_title} ({percent}%). Preserving existing metadata.")
+            logging.info(f"[Movie] No metadata changes for {full_title} ({percent}%). Preserving existing metadata.")
             consolidated_metadata["metadata"][full_title] = existing_metadata
         else:
-            logging.info(f"[Metadata] Fields changed for {full_title} ({percent}%). Updating metadata.")
+            logging.info(f"[Movie] Metadata fields updated for {full_title} ({percent}%): {changes}")
             consolidated_metadata["metadata"][full_title] = {
                 "match": {
                     "title": title,
@@ -210,15 +209,15 @@ async def build_movie(
     if dry_run:
         logging.info(f"[Dry Run] Would build metadata for Movie: {full_title}")
         if config.get("process_posters", True):
-            logging.info(f"[Dry Run] Would process poster for {full_title}")
+            logging.info(f"[Dry Run] Would process poster for Movie: {full_title}")
         if config.get("process_backgrounds", True):
-            logging.info(f"[Dry Run] Would process background for {full_title}")
+            logging.info(f"[Dry Run] Would process background for Movie: {full_title}")
         return {"percent": percent, "poster": {"size": 0}, "background": {"size": 0}}
 
     if metadata_changed:
         cache_key = f"movie:{title}:{year}"
-        update_meta_cache(cache_key, tmdb_id, title, year, "movie")
-        logging.info(f"[Metadata] Movie metadata built and saved for {full_title} ({percent}%) using TMDb ID {tmdb_id}.")
+        meta_cache(cache_key, tmdb_id, title, year, "movie")
+        logging.info(f"[Movie] Metadata upgraded/built for {full_title} ({percent}%) using TMDb ID {tmdb_id}.")
 
     poster_size = 0
     background_size = 0
@@ -226,61 +225,67 @@ async def build_movie(
 
     # Movie poster assets downloads
     if config.get("process_posters", True):
-        parent_dir = await get_plex_movie_directory(plex_item, _movie_cache=movie_cache)
-        asset_path = Path(config["assets_path"]) / library_name / parent_dir / "poster.jpg"
+        if not movie_path:
+            logging.warning(f"[Movie] No asset path found for {full_title}. Skipping poster asset.")                    
+        else:
+            asset_path = Path(config["assets_path"]) / library_name / movie_path / "poster.jpg"
         preferred_language = config["tmdb"].get("language", "en").split("-")[0]
         images = details.get("images", {}).get("posters", [])
         fallback = config["tmdb"].get("fallback", [])
-        best = get_best_poster(images, preferred_language=preferred_language, fallback=fallback)
+        best = get_best_poster(images, preferred_language=preferred_language, fallback=fallback, library_type="Movie")
         if best:
             temp_path = generate_temp_path(library_name)
             try:
-                if await download_poster(best["file_path"], temp_path, plex_item, session=session) and temp_path.exists():
+                if await download_poster(best["file_path"], temp_path, session=session, meta=meta, library_type="Movie") and temp_path.exists():
                     poster_size = temp_path.stat().st_size
-                    if should_upgrade(asset_path, best, new_image_path=temp_path, cache_key=cache_key, item=plex_item):
+                    if should_upgrade(asset_path, best, new_image_path=temp_path, cache_key=cache_key, item=plex_item, library_type="Movie"):
                         asset_path.parent.mkdir(parents=True, exist_ok=True)
                         shutil.move(temp_path, asset_path)
-                        logging.info(f"[Assets] Poster upgraded for {full_title}. Filesize: {human_readable_size(poster_size)}")
-                        update_meta_cache(cache_key, tmdb_id, title, year, "movie", poster_average=best.get("vote_average"))
+                        logging.info(f"[Movie] Poster downloaded for {full_title}. Filesize: {human_readable_size(poster_size)}")
+                        meta_cache(cache_key, tmdb_id, title, year, "movie", poster_average=best.get("vote_average"))
                     else:
-                        temp_path.unlink(missing_ok=True)
-                        logging.info(f"[Assets] No poster upgrade needed for {full_title}")
+                        if temp_path.exists():
+                            temp_path.unlink(missing_ok=True)
+                        logging.info(f"[Movie] Poster upgrade not needed for {full_title}")
                 else:
-                    logging.warning(f"[Assets] Poster download failed for {full_title}, skipping...")
+                    logging.warning(f"[Movie] Poster download failed for {full_title}, skipping...")
             finally:
                 if temp_path.exists():
                     temp_path.unlink(missing_ok=True)
             existing_assets.add(str(asset_path.resolve()))
         else:
-            logging.info(f"[Assets] No suitable poster found for {full_title}. Skipping...")
+            logging.info(f"[Movie] No suitable poster found for {full_title}. Skipping...")
 
     # Movie background assets downloads
     if config.get("process_backgrounds", True):
-        parent_dir = await get_plex_movie_directory(plex_item, _movie_cache=movie_cache)
-        asset_path = Path(config["assets_path"]) / library_name / parent_dir / "fanart.jpg"
+        if not movie_path:
+            logging.warning(f"[Movie] No asset path found for {full_title}. Skipping background asset.")
+        else:
+            asset_path = Path(config["assets_path"]) / library_name / movie_path / "fanart.jpg"
         images = details.get("images", {}).get("backdrops", [])
-        best = get_best_background(images)
+        best = get_best_background(images, library_type="Movie")
         if best:
             temp_path = generate_temp_path(library_name)
             try:
-                if await download_poster(best["file_path"], temp_path, plex_item, session=session) and temp_path.exists():
+                if await download_poster(best["file_path"], temp_path, session=session, meta=meta, library_type="Movie") and temp_path.exists():
                     background_size = temp_path.stat().st_size
-                    if should_upgrade(asset_path, best, new_image_path=temp_path, cache_key=cache_key, item=plex_item):
+                    if should_upgrade(asset_path, best, new_image_path=temp_path, cache_key=cache_key, item=plex_item, library_type="Movie"):
                         asset_path.parent.mkdir(parents=True, exist_ok=True)
                         shutil.move(temp_path, asset_path)
-                        logging.info(f"[Assets] Background upgraded for {full_title}. Filesize: {human_readable_size(background_size)}")
-                        update_meta_cache(cache_key, tmdb_id, title, year, "movie", bg_average=best.get("vote_average"))
+                        logging.info(f"[Movie] Background downloaded for {full_title}. Filesize: {human_readable_size(background_size)}")
+                        meta_cache(cache_key, tmdb_id, title, year, "movie", bg_average=best.get("vote_average"))
                     else:
-                        temp_path.unlink(missing_ok=True)
-                        logging.info(f"[Assets] No background upgrade needed for {full_title}")
+                        if temp_path.exists():
+                            temp_path.unlink(missing_ok=True)
+                        logging.info(f"[Movie] Background upgrade not needed for {full_title}")
                 else:
-                    logging.warning(f"[Assets] Background download failed for {full_title}, skipping...")
+                    logging.warning(f"[Movie] Background download failed for {full_title}, skipping...")
             finally:
                 if temp_path.exists():
                     temp_path.unlink(missing_ok=True)
             existing_assets.add(str(asset_path.resolve()))
         else:
-            logging.info(f"[Assets] No suitable background found for {full_title}. Skipping...")
+            logging.info(f"[Movie] No suitable background found for {full_title}. Skipping...")
 
     return {
         "percent": percent,
@@ -293,18 +298,16 @@ async def build_tv(
     consolidated_metadata,
     dry_run=False,
     existing_yaml_data=None,
-    season_cache=None,
-    episode_cache=None,
     session=None,
     ignored_fields=None,
     existing_assets=None,
-    library_name=None
+    library_name=None,
+    meta=None
 ):
     import pycountry
     """
-    Build and consolidate metadata for a TV show Plex item using TMDb data.
-    Also downloads poster, season posters, and background if enabled in config.
-    Returns a dict with percent and asset sizes.
+    Build metadata and assets for a TV Show Plex item using TMDb data.
+    Upgrades existing metadata or assets if needed.
     """
     if not config.get("process_metadata", True):
         return
@@ -313,10 +316,12 @@ async def build_tv(
         ignored_fields = set()
     if existing_assets is None:
         existing_assets = set()
-    title = getattr(plex_item, "title", "Unknown")
-    year = getattr(plex_item, "year", "Unknown")
+    title = meta.get("title", "Unknown") if meta else None
+    year = meta.get("year", "Unknown") if meta else None
     full_title = f"{title} ({year})"
-    tmdb_id = await resolve_tmdb_id(plex_item, title, year, "tv", session=session)
+    tmdb_id = meta.get("tmdb_id") if meta else None
+    show_path = meta.get("show_path") if meta else None
+    seasons_episodes = meta.get("seasons_episodes") if meta else None
 
     # If no TMDb ID, try searching by title
     if not tmdb_id:
@@ -335,7 +340,7 @@ async def build_tv(
                     tmdb_id = tv_id
         mapping_id = int(tvdb_id_for_mapping) if tvdb_id_for_mapping else ""
         if not tmdb_id or not mapping_id:
-            logging.warning(f"[Metadata] No TMDb or TVDb ID found for {full_title}. Skipping...")
+            logging.warning(f"[TV Show] No TMDb or TVDb ID found for {full_title}. Skipping...")
             return
     else:
         mapping_id = None 
@@ -343,7 +348,7 @@ async def build_tv(
     try:
         tmdb_id_int = int(tmdb_id)
     except (ValueError, TypeError):
-        logging.warning(f"[Metadata] Invalid TMDb ID format for {full_title}. Skipping...")
+        logging.warning(f"[TV Show] Invalid TMDb ID format for {full_title}. Skipping...")
         return
 
     # Try to get TV show details from cache, else fetch from TMDb
@@ -362,7 +367,7 @@ async def build_tv(
         if details:
             tmdb_response_cache[details_key] = details
         else:
-            logging.warning(f"[Metadata] No TMDb data found for {full_title}. Skipping...")
+            logging.warning(f"[TV Show] No TMDb data found for {full_title}. Skipping...")
             return
 
     content_rating = next(
@@ -399,16 +404,10 @@ async def build_tv(
         "country": countries or [],
     }.items() if k in show_fields_to_write and (k != "seasons")}
 
-    existing_seasons_episodes = await get_existing_plex_seasons_episodes(
-        plex_item,
-        _season_cache=season_cache,
-        _episode_cache=episode_cache
-    )
     seasons_data = {}
-
     async def process_season(season_info):
         season_number = season_info.get("season_number")
-        if season_number == 0 or season_number not in existing_seasons_episodes:
+        if season_number == 0 or not seasons_episodes or season_number not in seasons_episodes:
             return season_number, None
 
         season_key = f"tv/{tmdb_id_int}/season/{season_number}"
@@ -422,7 +421,7 @@ async def build_tv(
             if season_details:
                 tmdb_response_cache[season_key] = season_details
             else:
-                logging.warning(f"[Metadata] No TMDb data found for Season {season_number} of {full_title}. Skipping...")
+                logging.warning(f"[TV Shows] No TMDb data found for Season {season_number} of {full_title}. Skipping...")
                 return season_number, None
 
         show_crew = details.get("credits", {}).get("crew", []) or []
@@ -436,7 +435,7 @@ async def build_tv(
         episodes = {}
         for episode in season_details.get("episodes", []):
             ep_num = episode.get("episode_number")
-            if ep_num not in existing_seasons_episodes[season_number]:
+            if not seasons_episodes or season_number not in seasons_episodes or ep_num not in seasons_episodes[season_number]:
                 continue
             ep_crew = episode.get("crew", []) or season_crew or show_crew
             ep_credits = episode.get("credits", {}) or {}
@@ -520,34 +519,34 @@ async def build_tv(
         existing_metadata = existing_yaml_data.get("metadata", {}).get(full_title, {})
         changes = smart_meta_update(existing_metadata, {**new_metadata, "seasons": seasons_data})
         if not changes:
-            logging.info(f"[Metadata] No changes for {full_title} ({grand_percent}%). Preserving existing metadata.")
+            logging.info(f"[TV Show] No metadata changes for {full_title} ({grand_percent}%). Preserving existing metadata.")
             consolidated_metadata["metadata"][full_title] = existing_metadata
         else:
-            logging.info(f"[Metadata] Fields changed for {full_title} ({grand_percent}%). Updating metadata.")
+            logging.info(f"[TV Show] Metadata fields updated for {full_title} ({grand_percent}%): {changes}")
             consolidated_metadata["metadata"][full_title] = metadata_entry
             metadata_changed = True
     else:
         consolidated_metadata["metadata"][full_title] = metadata_entry
-        logging.info(f"[Metadata] No existing metadata for {full_title}. Creating new entry.")
+        logging.info(f"[TV Show] No existing metadata for {full_title}. Creating new entry.")
         metadata_changed = True
 
     if dry_run:
         logging.info(f"[Dry Run] Would build metadata for TV Show: {full_title}")
         if config.get("process_posters", True):
-            logging.info(f"[Dry Run] Would process poster for {full_title}")
+            logging.info(f"[Dry Run] Would process poster for TV Show: {full_title}")
         if config.get("process_season_posters", True):
             for season_info in season_infos:
                 season_number = season_info.get("season_number")
                 if season_number and season_number != 0:
-                    logging.info(f"[Dry Run] Would process season poster for {full_title} Season {season_number}")
+                    logging.info(f"[Dry Run] Would process season poster for TV Show: {full_title} Season {season_number}")
         if config.get("process_backgrounds", True):
-            logging.info(f"[Dry Run] Would process background for {full_title}")
+            logging.info(f"[Dry Run] Would process background for TV Show: {full_title}")
         return {"percent": grand_percent, "poster": {"size": 0}, "season_poster": {"size": 0}, "background": {"size": 0}}
 
     if metadata_changed:
         cache_key = f"tv:{title}:{year}"
-        update_meta_cache(cache_key, tmdb_id_int, title, year, "tv")
-        logging.info(f"[Metadata] TV metadata built and saved for {full_title} ({grand_percent}%) using TMDb ID {tmdb_id}.")
+        meta_cache(cache_key, tmdb_id_int, title, year, "tv")
+        logging.info(f"[TV Show] Metadata upgraded/built for {full_title} ({grand_percent}%) using TMDb ID {tmdb_id}.")
     
     poster_size = 0
     background_size = 0
@@ -556,102 +555,112 @@ async def build_tv(
     
     # TV Show poster assets downloads
     if config.get("process_posters", True):
-        parent_dir = await get_plex_show_directory(plex_item, _episode_cache=episode_cache)
-        asset_path = Path(config["assets_path"]) / library_name / parent_dir / "poster.jpg"
+        if not show_path:
+            logging.warning(f"[TV Show] No asset path found for {full_title}. Skipping poster asset.")
+        else:
+            asset_path = Path(config["assets_path"]) / library_name / show_path / "poster.jpg"
         preferred_language = config["tmdb"].get("language", "en").split("-")[0]
         images = details.get("images", {}).get("posters", [])
         fallback = config["tmdb"].get("fallback", [])
-        best = get_best_poster(images, preferred_language=preferred_language, fallback=fallback)
+        best = get_best_poster(images, preferred_language=preferred_language, fallback=fallback, library_type="TV Show")
         if best:
             temp_path = generate_temp_path(library_name)
             try:
-                if await download_poster(best["file_path"], temp_path, plex_item, session=session) and temp_path.exists():
+                if await download_poster(best["file_path"], temp_path, session=session, meta=meta, library_type="TV Show") and temp_path.exists():
                     poster_size = temp_path.stat().st_size
-                    if should_upgrade(asset_path, best, new_image_path=temp_path, cache_key=cache_key, item=plex_item):
+                    if should_upgrade(asset_path, best, new_image_path=temp_path, cache_key=cache_key, item=plex_item, library_type="TV Show"):
                         asset_path.parent.mkdir(parents=True, exist_ok=True)
                         shutil.move(temp_path, asset_path)
-                        logging.info(f"[Assets] Poster upgraded for {full_title}. Filesize: {human_readable_size(poster_size)}")
-                        update_meta_cache(cache_key, tmdb_id, title, year, "tv", poster_average=best.get("vote_average"))
+                        logging.info(f"[TV Show] Poster downloaded for {full_title}. Filesize: {human_readable_size(poster_size)}")
+                        meta_cache(cache_key, tmdb_id, title, year, "tv", poster_average=best.get("vote_average"))
                     else:
-                        temp_path.unlink(missing_ok=True)
-                        logging.info(f"[Assets] No poster upgrade needed for {full_title}")
+                        if temp_path.exists():
+                            temp_path.unlink(missing_ok=True)
+                        logging.info(f"[TV Show] Poster upgrade not needed for {full_title}")
                 else:
-                    logging.warning(f"[Assets] Poster download failed for {full_title}, skipping...")
+                    logging.warning(f"[TV Show] Poster download failed for {full_title}, skipping...")
             finally:
                 if temp_path.exists():
                     temp_path.unlink(missing_ok=True)
             existing_assets.add(str(asset_path.resolve()))
         else:
-            logging.info(f"[Assets] No suitable poster found for {full_title}. Skipping...)")
-    
+            logging.info(f"[TV Show] No suitable poster found for {full_title}. Skipping...")
+
     # TV Show season posters assets downloads
     if config.get("process_season_posters", True):
         for season_info in season_infos:
             season_number = season_info.get("season_number")
             if not season_number or season_number == 0:
                 continue
-            parent_dir = await get_plex_show_directory(plex_item, _episode_cache=episode_cache)
-            asset_path = Path(config["assets_path"]) / library_name / parent_dir / f"Season{season_number:02}.jpg"
+            if not show_path:
+                logging.warning(f"[TV Show] No asset path found for {full_title}. Skipping season poster asset.")
+            else:
+                asset_path = Path(config["assets_path"]) / library_name / show_path / f"Season{season_number:02}.jpg"
             season_key = f"tv/{tmdb_id_int}/season/{season_number}"
             season_details = tmdb_response_cache.get(season_key)
             if not season_details:
-                logging.info(f"[Assets] No season details for {full_title} Season {season_number}, skipping poster.")
+                logging.info(f"[TV Show] No season details for {full_title} Season {season_number}, skipping poster.")
                 continue
             preferred_language = config["tmdb"].get("language", "en").split("-")[0]
             images = season_details.get("images", {}).get("posters", [])
             fallback = config["tmdb"].get("fallback", [])
-            best = get_best_poster(images, preferred_language=preferred_language, fallback=fallback)
+            best = get_best_poster(images, preferred_language=preferred_language, fallback=fallback, library_type="TV Show")
             if best:
                 temp_path = generate_temp_path(library_name)
                 try:
-                    if await download_poster(best["file_path"], temp_path, plex_item, session=session) and temp_path.exists():
-                        season_poster_size += temp_path.stat().st_size
+                    if await download_poster(best["file_path"], temp_path, session=session, meta=meta, library_type="TV Show") and temp_path.exists():
+                        file_size = temp_path.stat().st_size
+                        season_poster_size += file_size
                         season_cache_key = f"tv:{title}:{year}:season{season_number}"
-                        if should_upgrade(asset_path, best, new_image_path=temp_path, cache_key=season_cache_key, item=plex_item, season_number=season_number):
+                        if should_upgrade(asset_path, best, new_image_path=temp_path, cache_key=season_cache_key, item=plex_item, season_number=season_number, library_type="TV Show"):
                             asset_path.parent.mkdir(parents=True, exist_ok=True)
                             shutil.move(temp_path, asset_path)
-                            logging.info(f"[Assets] Season poster upgraded for {full_title} Season {season_number}. Filesize: {human_readable_size(temp_path.stat().st_size)}")
-                            update_meta_cache(season_cache_key, tmdb_id, title, year, "tv", poster_average=best.get("vote_average"))
+                            logging.info(f"[TV Show] Season poster downloaded for {full_title} Season {season_number}. Filesize: {human_readable_size(file_size)}")
+                            meta_cache(season_cache_key, tmdb_id, title, year, "tv", poster_average=best.get("vote_average"))
                         else:
-                            temp_path.unlink(missing_ok=True)
-                            logging.info(f"[Assets] No season poster upgrade needed for {full_title} Season {season_number}")
+                            if temp_path.exists():
+                                temp_path.unlink(missing_ok=True)
+                            logging.info(f"[TV Show] Season poster upgrade not needed for {full_title} Season {season_number}")
                     else:
-                        logging.warning(f"[Assets] Season poster download failed for {full_title} Season {season_number}, skipping...")
+                        logging.warning(f"[TV Show] Season poster download failed for {full_title} Season {season_number}, skipping...")
                 finally:
                     if temp_path.exists():
                         temp_path.unlink(missing_ok=True)
                 existing_assets.add(str(asset_path.resolve()))
             else:
-                logging.info(f"[Assets] No suitable season poster found for {full_title} Season {season_number}. Skipping...)")
-    
+                logging.info(f"[TV Show] No suitable season poster found for {full_title} Season {season_number}. Skipping...")
+
     # TV Show background assets downloads
     if config.get("process_backgrounds", True):
-        parent_dir = await get_plex_show_directory(plex_item, _episode_cache=episode_cache)
-        asset_path = Path(config["assets_path"]) / library_name / parent_dir / "fanart.jpg"
+        if not show_path:
+            logging.warning(f"[TV Show] No asset path found for {full_title}. Skipping background asset.")
+        else:
+            asset_path = Path(config["assets_path"]) / library_name / show_path / "fanart.jpg"
         images = details.get("images", {}).get("backdrops", [])
-        best = get_best_background(images)
+        best = get_best_background(images, library_type="TV Show")
         if best:
             temp_path = generate_temp_path(library_name)
             try:
-                if await download_poster(best["file_path"], temp_path, plex_item, session=session) and temp_path.exists():
+                if await download_poster(best["file_path"], temp_path, session=session, meta=meta, library_type="TV Show") and temp_path.exists():
                     background_size = temp_path.stat().st_size
-                    if should_upgrade(asset_path, best, new_image_path=temp_path, cache_key=cache_key, item=plex_item):
+                    if should_upgrade(asset_path, best, new_image_path=temp_path, cache_key=cache_key, item=plex_item, library_type="TV Show"):
                         asset_path.parent.mkdir(parents=True, exist_ok=True)
                         shutil.move(temp_path, asset_path)
-                        logging.info(f"[Assets] Background upgraded for {full_title}. Filesize: {human_readable_size(background_size)}")
-                        update_meta_cache(cache_key, tmdb_id, title, year, "tv", bg_average=best.get("vote_average"))
+                        logging.info(f"[TV Show] Background downloaded for {full_title}. Filesize: {human_readable_size(background_size)}")
+                        meta_cache(cache_key, tmdb_id, title, year, "tv", bg_average=best.get("vote_average"))
                     else:
-                        temp_path.unlink(missing_ok=True)
-                        logging.info(f"[Assets] No background upgrade needed for {full_title}")
+                        if temp_path.exists():
+                            temp_path.unlink(missing_ok=True)
+                        logging.info(f"[TV Show] Background upgrade not needed for {full_title}")
                 else:
-                    logging.warning(f"[Assets] Background download failed for {full_title}, skipping...")
+                    logging.warning(f"[TV Show] Background download failed for {full_title}, skipping...")
             finally:
                 if temp_path.exists():
                     temp_path.unlink(missing_ok=True)
             existing_assets.add(str(asset_path.resolve()))
         else:
-            logging.info(f"[Assets] No suitable background found for {full_title}. Skipping...)")
-    
+            logging.info(f"[TV Show] No suitable background found for {full_title}. Skipping...")
+
     return {
         "percent": grand_percent,
         "poster": {"size": poster_size},

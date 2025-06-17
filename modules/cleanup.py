@@ -2,7 +2,7 @@ import logging
 from pathlib import Path
 from helper.config import load_config
 from helper.cache import load_cache, save_cache
-from helper.plex import get_plex_movie_directory, get_plex_show_directory
+from helper.plex import plex_metadata
 
 config = load_config()
 
@@ -29,15 +29,15 @@ async def cleanup_orphans(plex, libraries=None, asset_path=None, existing_assets
 
         media_type = section.TYPE if hasattr(section, "TYPE") else section.type
         for item in section.all():
-            title = getattr(item, "title", None)
-            year = getattr(item, "year", None)
+            meta = await plex_metadata(item, _movie_cache=movie_cache, _episode_cache=episode_cache)
+            title = meta.get("title")
+            year = meta.get("year")
             if title and year:
                 if media_type in ["show", "tv"]:
                     global_valid_cache_keys.add(f"tv:{title}:{year}")
-                    if hasattr(item, "seasons"):
-                        for season in item.seasons():
-                            season_number = season.index
-                            global_valid_cache_keys.add(f"tv:{title}:{year}:season{season_number}")
+                    seasons_episodes = meta.get("seasons_episodes") or {}
+                    for season_number in seasons_episodes:
+                        global_valid_cache_keys.add(f"tv:{title}:{year}:season{season_number}")
                 else:
                     global_valid_cache_keys.add(f"movie:{title}:{year}")
                 global_existing_titles.add(f"{title} ({year})")
@@ -83,7 +83,7 @@ async def cleanup_orphans(plex, libraries=None, asset_path=None, existing_assets
                 logging.info(f"[Cleanup] Removed {orphans_in_file} from {metadata_file.name}")
 
         except Exception as e:
-            logging.error(f"[Cleanup] Failed processing {metadata_file}: {e}")
+            logging.error(f"[Cleanup] Failed to remove {metadata_file}: {e}")
 
     # Asset orphan cleanup
     if asset_path:
@@ -91,12 +91,13 @@ async def cleanup_orphans(plex, libraries=None, asset_path=None, existing_assets
         for section in plex_sections:
             media_type = section.TYPE if hasattr(section, "TYPE") else section.type
             for item in section.all():
-                if media_type in ["movie"]:
-                    dir_name = await get_plex_movie_directory(item, _movie_cache=movie_cache)
+                meta = await plex_metadata(item, _movie_cache=movie_cache, _episode_cache=episode_cache)
+                if media_type == "movie":
+                    dir_name = meta.get("movie_path")
                     if dir_name:
                         valid_asset_dirs.add(dir_name)
                 elif media_type in ["show", "tv"]:
-                    dir_name = await get_plex_show_directory(item, _episode_cache=episode_cache)
+                    dir_name = meta.get("show_path")
                     if dir_name:
                         valid_asset_dirs.add(dir_name)
 
@@ -132,7 +133,6 @@ async def cleanup_orphans(plex, libraries=None, asset_path=None, existing_assets
             *(remove_orphaned_file(p, "season poster") for p in orphaned_season_posters),
             *(remove_orphaned_file(p, "background") for p in orphaned_backgrounds),
         )
-        logging.info(f"[Cleanup] Asset cleanup complete.")
 
     logging.info(f"[Cleanup] Total titles removed: {orphans_removed}")
     return orphans_removed
