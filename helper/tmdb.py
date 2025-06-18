@@ -24,13 +24,9 @@ async def tmdb_api_request(
     **kwargs
 ):
     import hashlib
-    """
-    TMDb API request, with retries, rate limiting, and caching.
-    """
     if session is None:
         raise ValueError("An aiohttp session must be passed to tmdb_api_request")
 
-    # Determine if this is a full URL (for images) or an endpoint (for API)
     if endpoint_or_url.startswith("http"):
         url = endpoint_or_url
         query = params or {}
@@ -85,57 +81,15 @@ async def tmdb_api_request(
     logging.error(f"[TMDb] Failed after {retries} attempts for {url}")
     return None
 
-async def download_poster(image_path, save_path, session=None, meta=None, library_type=None):
-    from modules.utils import save_poster
-    """
-    Download a poster image from TMDb and save it to the specified path.
-    """
-    title_year = meta.get("title_year") if meta else None
-    if session is None:
-        raise ValueError("An aiohttp session must be passed to download_poster")
-    try:
-        url = f"https://image.tmdb.org/t/p/original{image_path}"
-        logging.debug(f"{library_type} Downloading {title_year} poster from URL: {url}")
-        if save_path.exists() and not config.get("dry_run", False):
-            logging.info(f"{library_type} Poster {title_year} already exists. Skipping download.")
-            return True
-        if config.get("dry_run", False):
-            logging.info(f"[Dry Run] Would download {title_year} from {url}")
-            return True 
-        response_content = await tmdb_api_request(url, raw=True, cache=False, session=session)
-        if not response_content:
-            logging.warning(f"{library_type} Failed to download image for {title_year}")
-            return False
-        try:
-            await save_poster(response_content, save_path, library_type=library_type, meta=meta)
-            if save_path.exists():
-                logging.info(f"{library_type} Downloaded poster for {title_year}")
-                return True
-            else:
-                logging.warning(f"{library_type} Poster file was not created for {title_year} at {save_path}")
-                return False
-        except Exception as e:
-            logging.warning(f"{library_type} Failed to save poster for {title_year}: {e}")
-            return False
-
-    except Exception as e:
-        logging.warning(f"{library_type} Failed to process poster download for {title_year}: {e}")
-        return False
-
 def meta_cache(cache_key, tmdb_id, title, year, media_type, **kwargs):
     from datetime import datetime
-    """
-    Update the TMDb cache with a new or updated entry.
-    """
     cache = load_cache() 
     entry = cache.get(cache_key, {})
-    # Always update these fields
     entry["tmdb_id"] = tmdb_id
     entry["title"] = title
     entry["year"] = year
     entry["media_type"] = media_type
     entry["last_updated"] = datetime.now().isoformat()
-    # Optionally update any extra fields passed as kwargs
     for k, v in kwargs.items():
         entry[k] = v
     cache[cache_key] = entry

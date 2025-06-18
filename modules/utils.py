@@ -4,6 +4,7 @@ import uuid
 from pathlib import Path
 from helper.config import load_config
 from helper.cache import load_cache
+from helper.tmdb import tmdb_api_request
 
 config = load_config()
 
@@ -36,7 +37,7 @@ def get_best_poster(
     logging.debug(f"[{library_type}] Language priority for posters: {language_priority}")
 
     # Use config defaults if not provided
-    poster_sel = config["poster_selection"]
+    poster_sel = config["poster_settings"]
     preferred_vote = preferred_vote if preferred_vote is not None else poster_sel["preferred_vote"]
     preferred_width = preferred_width if preferred_width is not None else poster_sel["preferred_width"]
     preferred_height = preferred_height if preferred_height is not None else poster_sel["preferred_height"]
@@ -115,7 +116,7 @@ def get_best_background(
         logging.debug(f"[{library_type}] No images available to select the best background.")
         return None
 
-    bg_sel = config["background_selection"]
+    bg_sel = config["background_settings"]
     preferred_vote = preferred_vote if preferred_vote is not None else bg_sel["preferred_vote"]
     preferred_width = preferred_width if preferred_width is not None else bg_sel["preferred_width"]
     preferred_height = preferred_height if preferred_height is not None else bg_sel["preferred_height"]
@@ -179,12 +180,11 @@ def smart_meta_update(existing_metadata, new_metadata):
                 changed_fields.append(key)
     return changed_fields
 
-def should_upgrade(
+def smart_asset_upgrade(
     asset_path,
     new_image_data,
     new_image_path=None,
     cache_key=None,
-    item=None,
     season_number=None,
     asset_type="poster",
     library_type=None,
@@ -201,12 +201,23 @@ def should_upgrade(
     label = title_year or "Unknown"
     if season_number is not None:
         label = f"{label} Season {season_number}"
-    if asset_type == "background":
-        vote_threshold = config["background_selection"].get("vote_average_threshold", 5.0)
-        cache_key_name = "bg_average"
+    if library_type == "Collection":
+        if asset_type == "collection":
+            vote_threshold = config["poster_settings"].get("vote_threshold", 5.0)
+            cache_key_name = "collection_average"
+        elif asset_type == "collection_background":
+            vote_threshold = config["background_settings"].get("vote_threshold", 5.0)
+            cache_key_name = "collection_bg_average"
+        else:
+            vote_threshold = config["poster_settings"].get("vote_threshold", 5.0)
+            cache_key_name = "collection_average"
     else:
-        vote_threshold = config["poster_selection"].get("vote_average_threshold", 5.0)
-        cache_key_name = "poster_average"
+        if asset_type == "background":
+            vote_threshold = config["background_settings"].get("vote_threshold", 5.0)
+            cache_key_name = "bg_average"
+        else:
+            vote_threshold = config["poster_settings"].get("vote_threshold", 5.0)
+            cache_key_name = "poster_average"
 
     # Compare to cached vote_average if available
     cached_votes = 0
@@ -220,15 +231,15 @@ def should_upgrade(
     # Or if there is no cached value and new_votes meets threshold
     if new_votes > cached_votes:
         logging.debug(f"[{library_type}] {label} upgraded based on vote average: {new_votes} (Cached: {cached_votes}, Threshold: {vote_threshold})")
-        return not config.get("dry_run", False)
+        return not config["settings"].get("dry_run", False)
     elif cached_votes == 0 and new_votes >= vote_threshold:
         logging.debug(f"[{library_type}] {label} upgraded based on vote average threshold: {new_votes} (Threshold: {vote_threshold})")
-        return not config.get("dry_run", False)
+        return not config["settings"].get("dry_run", False)
 
     # If no existing poster, always upgrade
     if not asset_path.exists():
         logging.info(f"[{library_type}] No existing poster for {label}. Downloading new poster.")
-        return not config.get("dry_run", False)
+        return not config["settings"].get("dry_run", False)
 
     # If new image file exists, compare dimensions
     if new_image_path and new_image_path.exists():
@@ -237,7 +248,7 @@ def should_upgrade(
                 existing_width, existing_height = img.size
         except Exception as e:
             logging.warning(f"[{library_type}] Failed to read temp image for comparison: {e}")
-            return not config.get("dry_run", False)
+            return not config["settings"].get("dry_run", False)
     else:
         logging.debug(f"[{library_type}] No image provided for comparison. Skipping detailed check.")
         return False
@@ -248,16 +259,16 @@ def should_upgrade(
             f"[{library_type}] {label}: New {new_width}x{new_height}, "
             f"Existing {existing_width}x{existing_height}"
         )
-        return not config.get("dry_run", False)
+        return not config["settings"].get("dry_run", False)
 
     logging.debug(f"[{library_type}] No upgrade needed for {label}. Existing image meets criteria.")
     return False
 
-def generate_temp_path(library_name, extension="jpg"):
+def asset_temp_path(library_name, extension="jpg"):
     """
     Generate a temporary file path for storing assets.
     """
-    assets_path = Path(config["assets_path"])
+    assets_path = Path(config["assets"]["path"])
     temp_dir = assets_path / library_name
     temp_dir.mkdir(parents=True, exist_ok=True)
     temp_filename = f"temp_{uuid.uuid4().hex}.{extension}"
@@ -281,7 +292,7 @@ async def save_poster(image_content, save_path, library_type=None, meta=None):
                 return
             else:
                 logging.info(f"[{library_type}] Checksum difference detected for {title_year}. Proceeding to update.")
-        if config.get("dry_run", False):
+        if config["settings"].get("dry_run", False):
             logging.info(f"[Dry Run] Would save poster for {title_year}")
             return
         save_path.parent.mkdir(parents=True, exist_ok=True)
@@ -293,3 +304,89 @@ async def save_poster(image_content, save_path, library_type=None, meta=None):
 
     except Exception as e:
         logging.warning(f"[{library_type}] Failed to save poster for {title_year}: {e}")
+
+async def download_poster(image_path, save_path, session=None, meta=None, library_type=None):
+    """
+    Download a poster image from TMDb and save it to the specified path.
+    """
+    title_year = meta.get("title_year") if meta else None
+    if session is None:
+        raise ValueError("An aiohttp session must be passed to download_poster")
+    try:
+        url = f"https://image.tmdb.org/t/p/original{image_path}"
+        logging.debug(f"{library_type} Downloading {title_year} poster from URL: {url}")
+        if save_path.exists() and not config["settings"].get("dry_run", False):
+            logging.info(f"{library_type} Poster {title_year} already exists. Skipping download.")
+            return True
+        if config["settings"].get("dry_run", False):
+            logging.info(f"[Dry Run] Would download {title_year} from {url}")
+            return True 
+        response_content = await tmdb_api_request(url, raw=True, cache=False, session=session)
+        if not response_content:
+            logging.warning(f"{library_type} Failed to download image for {title_year}")
+            return False
+        try:
+            await save_poster(response_content, save_path, library_type=library_type, meta=meta)
+            if save_path.exists():
+                logging.info(f"{library_type} Downloaded poster for {title_year}")
+                return True
+            else:
+                logging.warning(f"{library_type} Poster file was not created for {title_year} at {save_path}")
+                return False
+        except Exception as e:
+            logging.warning(f"{library_type} Failed to save poster for {title_year}: {e}")
+            return False
+
+    except Exception as e:
+        logging.warning(f"{library_type} Failed to process poster download for {title_year}: {e}")
+        return False
+    
+def get_asset_path(meta, asset_type="poster", season_number=None, collection_name=None):
+    """
+    Returns the correct asset path based on config.
+    """
+    mode = config["assets"].get("mode", "kometa")
+    library_type = meta.get("library_type")
+    show_path = meta.get("show_path")
+    movie_path = meta.get("movie_path")
+    assets_path = Path(config["assets"]["path"])
+
+    if asset_type in ("collection", "collection_background"):
+        if mode != "kometa":
+            return None
+        if not collection_name:
+            raise ValueError("collection_name must be provided for collection asset types in kometa mode.")
+        base = assets_path / library_type / collection_name
+        if asset_type == "collection":
+            return base / "poster.jpg"
+        elif asset_type == "collection_background":
+            return base / "fanart.jpg"
+
+    if mode == "plex":
+        if asset_type == "poster":
+            if library_type == "movie":
+                return Path(meta["movie_dir"]) / "poster.jpg"
+            elif library_type in ("show", "tv"):
+                return Path(meta["show_dir"]) / "poster.jpg"
+        elif asset_type == "background":
+            if library_type == "movie":
+                return Path(meta["movie_dir"]) / "fanart.jpg"
+            elif library_type in ("show", "tv"):
+                return Path(meta["show_dir"]) / "fanart.jpg"
+        elif asset_type == "season" and season_number is not None:
+            return Path(meta["show_dir"]) / f"Season {season_number:02}" / f"Season{season_number:02}.jpg"
+    else:
+        assets_path = Path(config["assets"]["path"])
+        if asset_type == "poster":
+            if library_type == "movie":
+                return assets_path / library_type / movie_path / "poster.jpg"
+            elif library_type in ("show", "tv"):
+                return assets_path / library_type / show_path / "poster.jpg"
+        elif asset_type == "background":
+            if library_type == "movie":
+                return assets_path / library_type / movie_path / "fanart.jpg"
+            elif library_type in ("show", "tv"):
+                return assets_path / library_type / show_path / "fanart.jpg"
+        elif asset_type == "season" and season_number is not None:
+            return assets_path / library_type / show_path / f"Season{season_number:02}.jpg"
+    return None

@@ -89,10 +89,9 @@ async def process_library(
     library_name = library_section.title
     if ignored_fields is None:
         ignored_fields = {"collection", "guest"}
-    output_path = Path(config["metadata_path"]) / f"{library_name.lower().replace(' ', '_')}.yml"
+    output_path = Path(config["metadata"]["directory"]) / f"{library_name.lower().replace(' ', '_')}.yml"
     existing_yaml_data = {}
     
-    # Load existing metadata if present
     if output_path.exists():
         try:
             with open(output_path, "r", encoding="utf-8") as f:
@@ -135,7 +134,7 @@ async def process_library(
             )
             # Aggregate asset sizes
             if stats and isinstance(stats, dict):
-                for key in ("poster", "season_poster", "background"):
+                for key in ("poster", "season_poster", "background", "collection_poster", "collection_background"):
                     total = stats.get(key, {}).get("size", 0)
                     nonlocal total_asset_size
                     total_asset_size += total

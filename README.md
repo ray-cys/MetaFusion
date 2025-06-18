@@ -82,42 +82,42 @@ tmdb:
     - fr
 
 # Plex libraries
-preferred_libraries:
+plex_libraries:
   - Movies
   - TV Shows
 
 # Metadata & Asset processing
-process_metadata: true
-process_posters: true
-process_season_posters: true
-process_backgrounds: true
+run_basic: true
+run_poster: true
+run_season: true
+run_background: true
 cleanup_orphans: true
 
 # Metadata output
-metadata_path: "/path/to/metadata/"
+directory: "/path/to/metadata/"
 
 # Asset management
-assets_path: "/path/to/assets"
+path: "/path/to/assets"
 
 # Poster selection preferences
-poster_selection:
+poster_settings:
   preferred_width: 2000
   preferred_height: 3000
   min_width: 1000
   min_height: 1500
   preferred_vote: 5.0
   vote_relaxed: 3.5
-  vote_average_threshold: 5.0
+  vote_threshold: 5.0
 
 # Background selection preferences
-background_selection:
+background_settings:
   preferred_width: 3840
   preferred_height: 2160
   min_width: 1920
   min_height: 1080
   preferred_vote: 5.0
   vote_relaxed: 3.5
-  vote_average_threshold: 5.0
+  vote_threshold: 5.0
 
 
 ```
@@ -146,8 +146,8 @@ python metadata_gen.py
 
 ## 📝 How to Read the Output
 
-- **YAML files** are generated in your `metadata_path`, one per library.
-- **Assets** (posters, season images) are saved in your configured `assets_path`.
+- **YAML files** are generated in your `directory`, one per library.
+- **Assets** (posters, season images) are saved in your configured `path`.
 - **Logs** are written to `metadata_generator.log` for troubleshooting and audit.
 
 ---

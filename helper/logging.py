@@ -10,9 +10,6 @@ MIN_CPU_CORES = 4
 MIN_RAM_GB = 4
 
 def setup_logging(config):
-    """
-    Set up logging for the application
-    """
     script_name = Path(sys.argv[0]).stem
     log_dir = Path(__file__).parent.parent / "logs"
     log_dir.mkdir(exist_ok=True)
@@ -29,7 +26,7 @@ def setup_logging(config):
     if log_file.exists():
         log_file.rename(log_dir / f"{script_name}1.log")
 
-    log_level_str = config.get("log_level", "INFO").upper()
+    log_level_str = config["settings"].get("log_level", "INFO").upper()
     log_level = getattr(logging, log_level_str, logging.INFO)
 
     logger = logging.getLogger()
@@ -91,7 +88,6 @@ def check_requirements(logger):
     if ram_gb < MIN_RAM_GB:
         logger.error(f"[System Error] At least {MIN_RAM_GB} GB RAM required. Detected: {ram_gb:.2f} GB")
         sys.exit(1)
-    # If all requirements met, log hardware info
     log_hardware_info(logger)
 
 def log_summary_report(
@@ -101,7 +97,7 @@ def log_summary_report(
     metadata_summaries,
     library_filesize,
     orphans_removed,
-    cleanup_orphans_flag,
+    cleanup_orphans,
     selected_libraries,
     libraries,
     config
@@ -136,11 +132,11 @@ def log_summary_report(
     logger.info(f"  - Total assets downloaded: {human_readable_size(total_asset_size)}")
 
     logger.info("[ Total Cleanup Statistics ]")
-    if cleanup_orphans_flag:
+    if cleanup_orphans:
         logger.info(f"  - Titles removed from MetaFusion: {orphans_removed}")
     logger.info("=" * 50)
 
-    if config.get("dry_run", False):
+    if config["settings"].get("dry_run", False):
         logger.info("[Dry Run] Completed. No files were written.")
             
 def meta_summary_banner(logger=None, width=50):

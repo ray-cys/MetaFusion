@@ -5,10 +5,6 @@ from pathlib import Path
 _plex_cache = {}
 
 async def plex_metadata(item, _season_cache=None, _episode_cache=None, _movie_cache=None):
-    """
-    Extract and cache Plex metadata for a given item.
-    Uses aggressive in-memory cache.
-    """
     global _plex_cache
     if _season_cache is None:
         _season_cache = {}
@@ -21,20 +17,17 @@ async def plex_metadata(item, _season_cache=None, _episode_cache=None, _movie_ca
     if item_key in _plex_cache:
         return _plex_cache[item_key]
 
-    # Library info
     library_section = getattr(item, "librarySection", None)
     library_name = getattr(library_section, "title", None) or "Unknown"
     library_type = (getattr(library_section, "type", None) or getattr(item, "type", None) or "unknown").lower()
     if library_type == "show":
         library_type = "tv"
 
-    # Basic info
     title = getattr(item, "title", None)
     year = getattr(item, "year", None)
     title_year = f"{title} ({year})" if title and year else None
     ratingKey = getattr(item, "ratingKey", None)
 
-    # GUIDs
     tmdb_id = imdb_id = tvdb_id = None
     for guid in getattr(item, "guids", []):
         if guid.id.startswith("tmdb://"):
@@ -44,8 +37,8 @@ async def plex_metadata(item, _season_cache=None, _episode_cache=None, _movie_ca
         elif guid.id.startswith("tvdb://"):
             tvdb_id = guid.id.split("://")[1].split("?")[0]
 
-    # Movie path
     movie_path = None
+    movie_dir = None
     if library_type == "movie" or hasattr(item, "iterParts"):
         try:
             if item_key in _movie_cache:
@@ -56,11 +49,12 @@ async def plex_metadata(item, _season_cache=None, _episode_cache=None, _movie_ca
             if parts:
                 file_path = parts[0].file
                 movie_path = Path(file_path).parent.name
+                movie_dir = str(Path(file_path).parent)
         except Exception as e:
             logging.warning(f"[Plex] Failed to extract movie directory for {title} ({year}): {e}")
 
-    # Show path
     show_path = None
+    show_dir = None
     if library_type in ("show", "tv") or hasattr(item, "episodes"):
         try:
             if item_key in _episode_cache:
@@ -74,6 +68,7 @@ async def plex_metadata(item, _season_cache=None, _episode_cache=None, _movie_ca
                     for part in getattr(media, 'parts', []):
                         file_path = Path(part.file)
                         show_path = file_path.parent.parent.name
+                        show_dir = str(file_path.parent.parent)
                         found = True
                         break
                     if found:
@@ -83,7 +78,6 @@ async def plex_metadata(item, _season_cache=None, _episode_cache=None, _movie_ca
         except Exception as e:
             logging.warning(f"[Plex] Failed to extract show directory for {title} ({year}): {e}")
 
-    # Seasons to episodes mapping
     seasons_episodes = None
     if library_type in ("show", "tv") or hasattr(item, "seasons"):
         try:
@@ -106,18 +100,20 @@ async def plex_metadata(item, _season_cache=None, _episode_cache=None, _movie_ca
         except Exception as e:
             logging.warning(f"[Plex] Failed to extract seasons/episodes for {title} ({year}): {e}")
 
-    # Build result and cache into memory
     result = {
         "library_name": library_name,
         "library_type": library_type,
         "title": title,
         "year": year,
+        "title_year": title_year,
         "ratingKey": ratingKey,
         "tmdb_id": tmdb_id,
         "imdb_id": imdb_id,
         "tvdb_id": tvdb_id,
         "movie_path": movie_path,
+        "movie_dir": movie_dir,
         "show_path": show_path,
+        "show_dir": show_dir,
         "seasons_episodes": seasons_episodes,
     }
     _plex_cache[item_key] = result

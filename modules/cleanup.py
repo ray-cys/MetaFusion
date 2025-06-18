@@ -11,7 +11,6 @@ async def cleanup_orphans(plex, libraries=None, asset_path=None, existing_assets
     import asyncio
 
     logging.info("[Cleanup] Starting titles cleanup...")
-
     movie_cache = {}
     episode_cache = {}
 
@@ -21,7 +20,6 @@ async def cleanup_orphans(plex, libraries=None, asset_path=None, existing_assets
     plex_sections = plex.library.sections()
     selected_libraries = libraries if libraries else [section.title for section in plex_sections]
 
-    # Build global valid cache keys and YAML keys for all libraries
     for section in plex_sections:
         library_name = section.title
         if library_name not in selected_libraries:
@@ -42,7 +40,6 @@ async def cleanup_orphans(plex, libraries=None, asset_path=None, existing_assets
                     global_valid_cache_keys.add(f"movie:{title}:{year}")
                 global_existing_titles.add(f"{title} ({year})")
 
-    # TMDb cache cleanup
     cache = load_cache()
     cache_keys_to_remove = [
         key for key in list(cache.keys())
@@ -54,12 +51,11 @@ async def cleanup_orphans(plex, libraries=None, asset_path=None, existing_assets
         logging.info(f"[Cleanup] Removed cache entry: {key}")
     save_cache(cache)
 
-    # YAML metadata cleanup
-    preferred_libraries = config.get("preferred_libraries", ["Movies", "TV Shows"])
+    plex_libraries = config.get("plex_libraries", ["Movies", "TV Shows"])
     preferred_filenames = {
-        f"{lib.lower().replace(' ', '_')}.yml" for lib in preferred_libraries
+        f"{lib.lower().replace(' ', '_')}.yml" for lib in plex_libraries
     }
-    for metadata_file in Path(config["metadata_path"]).glob("*.yml"):
+    for metadata_file in Path(config["metadata"]["directory"]).glob("*.yml"):
         if metadata_file.name not in preferred_filenames:
             logging.info(f"[Cleanup] Skipping non-preferred library: {metadata_file.name}")
             continue
@@ -85,7 +81,6 @@ async def cleanup_orphans(plex, libraries=None, asset_path=None, existing_assets
         except Exception as e:
             logging.error(f"[Cleanup] Failed to remove {metadata_file}: {e}")
 
-    # Asset orphan cleanup
     if asset_path:
         valid_asset_dirs = set()
         for section in plex_sections:
@@ -110,20 +105,19 @@ async def cleanup_orphans(plex, libraries=None, asset_path=None, existing_assets
             if existing_assets is not None and resolved_path in existing_assets:
                 logging.info(f"[Cleanup] Skipping in-use {description}: {path}")
                 return
-            action_msg = "[Dry Run] Would remove" if config.get("dry_run", False) else "Removing"
+            action_msg = "[Dry Run] Would remove" if config["settings"].get("dry_run", False) else "Removing"
             logging.info(f"[Cleanup] {action_msg} cleanup {description}: {path}")
-            if not config.get("dry_run", False):
+            if not config["settings"].get("dry_run", False):
                 try:
                     await asyncio.to_thread(path.unlink)
                     orphans_removed += 1
                     if not any(path.parent.iterdir()):
-                        parent_action_msg = "[Dry Run] Would remove" if config.get("dry_run", False) else "Removing"
+                        parent_action_msg = "[Dry Run] Would remove" if config["settings"].get("dry_run", False) else "Removing"
                         logging.info(f"[Cleanup] {parent_action_msg} empty directory: {path.parent}")
                         await asyncio.to_thread(path.parent.rmdir)
                 except Exception as e:
                     logging.warning(f"[Cleanup] Failed to remove {description} {path}: {e}")
 
-        # Cleanup orphaned all assets at once
         orphaned_posters = [p for p in Path(asset_path).rglob("poster.jpg")]
         orphaned_season_posters = [p for p in Path(asset_path).rglob("Season*.jpg")]
         orphaned_backgrounds = [p for p in Path(asset_path).rglob("fanart.jpg")]
