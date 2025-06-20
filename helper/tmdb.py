@@ -25,7 +25,7 @@ async def tmdb_api_request(
 ):
     import hashlib
     if session is None:
-        raise ValueError("An aiohttp session must be passed to tmdb_api_request")
+        raise ValueError("No aiohttp session provided for TMDb API request")
 
     if endpoint_or_url.startswith("http"):
         url = endpoint_or_url
@@ -81,16 +81,3 @@ async def tmdb_api_request(
     logging.error(f"[TMDb] Failed after {retries} attempts for {url}")
     return None
 
-def meta_cache(cache_key, tmdb_id, title, year, media_type, **kwargs):
-    from datetime import datetime
-    cache = load_cache() 
-    entry = cache.get(cache_key, {})
-    entry["tmdb_id"] = tmdb_id
-    entry["title"] = title
-    entry["year"] = year
-    entry["media_type"] = media_type
-    entry["last_updated"] = datetime.now().isoformat()
-    for k, v in kwargs.items():
-        entry[k] = v
-    cache[cache_key] = entry
-    save_cache(cache)

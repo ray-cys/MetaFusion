@@ -48,7 +48,7 @@ async def cleanup_orphans(plex, libraries=None, asset_path=None, existing_assets
     for key in cache_keys_to_remove:
         del cache[key]
         orphans_removed += 1
-        logging.info(f"[Cleanup] Removed cache entry: {key}")
+        logging.info(f"[Cleanup] Removed TMDb cache entry: {key}")
     save_cache(cache)
 
     plex_libraries = config.get("plex_libraries", ["Movies", "TV Shows"])

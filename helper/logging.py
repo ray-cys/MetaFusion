@@ -2,8 +2,11 @@ import logging
 import sys
 import os
 import platform
+import textwrap
+import requests
 import psutil
 from pathlib import Path
+from helper.config import load_config
 
 MIN_PYTHON = (3, 8)
 MIN_CPU_CORES = 4
@@ -64,7 +67,7 @@ def meta_banner(logger=None, width=50):
         for line in lines:
             print(line)
 
-def log_hardware_info(logger):
+def hardware_info(logger):
     os_info = f"{platform.system()} {platform.release()}"
     py_version = platform.python_version()
     cpu_cores = os.cpu_count()
@@ -75,20 +78,55 @@ def log_hardware_info(logger):
     logger.info(f"[System] RAM: {ram_gb:.2f} GB")
 
 def check_requirements(logger):
+    config = load_config()
     py_version = sys.version_info
     cpu_cores = os.cpu_count()
     ram_gb = psutil.virtual_memory().total / (1024 ** 3)
 
     if py_version < MIN_PYTHON:
-        logger.error(f"[System Error] Python {MIN_PYTHON[0]}.{MIN_PYTHON[1]}+ required. Detected: {platform.python_version()}")
+        logger.error(f"[System] Python {MIN_PYTHON[0]}.{MIN_PYTHON[1]}+ required. Detected: {platform.python_version()}. Exiting.")
         sys.exit(1)
     if cpu_cores is not None and cpu_cores < MIN_CPU_CORES:
-        logger.error(f"[System Error] At least {MIN_CPU_CORES} CPU cores required. Detected: {cpu_cores}")
+        logger.error(f"[System] At least {MIN_CPU_CORES} CPU cores required. Detected: {cpu_cores}. Exiting.")
         sys.exit(1)
     if ram_gb < MIN_RAM_GB:
-        logger.error(f"[System Error] At least {MIN_RAM_GB} GB RAM required. Detected: {ram_gb:.2f} GB")
+        logger.error(f"[System] At least {MIN_RAM_GB} GB RAM required. Detected: {ram_gb:.2f} GB. Exiting.")
         sys.exit(1)
-    log_hardware_info(logger)
+    hardware_info(logger)
+
+    plex_url = config.get('plex', {}).get('url')
+    plex_token = config.get('plex', {}).get('token')
+    internal_up = False
+    if plex_url and plex_token:
+        try:
+            url = f"{plex_url}/?X-Plex-Token={plex_token}"
+            resp = requests.get(url, timeout=2)
+            internal_up = resp.status_code in (200, 401)
+        except Exception as e:
+            logger.error(f"[Network] Internal network (Plex server) check failed: {e}")
+    else:
+        logger.error("[Network] Plex server URL or token not set in config.")
+
+    tmdb_api_key = config.get('tmdb', {}).get('api_key')
+    tmdb_up = False
+    if tmdb_api_key:
+        tmdb_url = f"https://api.themoviedb.org/3/configuration?api_key={tmdb_api_key}"
+        try:
+            resp = requests.get(tmdb_url, timeout=3)
+            tmdb_up = resp.status_code == 200
+        except Exception as e:
+            logger.error(f"[Network] TMDb API check failed: {e}")
+    else:
+        logger.error("[Network] TMDb API key not set in config.")
+
+    if internal_up and tmdb_up:
+        logger.info("[Network] Plex server and TMDb API are UP.")
+    else:
+        if not internal_up:
+            logger.error("[Network] Plex server is DOWN. Exiting.")
+        if not tmdb_up:
+            logger.error("[Network] TMDb API is DOWN. Exiting.")
+        sys.exit(1)
 
 def log_summary_report(
     logger,
@@ -102,43 +140,49 @@ def log_summary_report(
     libraries,
     config
 ):
+    box_width = 60
+    def box_line(text, width=box_width):
+        wrapped = textwrap.wrap(text, width=width-4)
+        return [f"|| {line.ljust(width-4)}||" for line in wrapped]
+
+    border = "=" * box_width
+    title = "METAFUSION SUMMARY REPORT".center(box_width - 2)
+    lines = [
+        border,
+        f"||{title}||",
+        border
+    ]
     minutes, seconds = divmod(int(elapsed_time), 60)
-    meta_summary_banner(logger)
-    logger.info(f"[Summary] Processing completed in {minutes} mins {seconds} secs.")
+    lines.extend(box_line(f"Processing completed in {minutes} mins {seconds} secs.", box_width))
 
-    skipped_libraries = [lib.title for lib in libraries if lib.title not in selected_libraries]
-    logger.info(
-        f"[Summary] Libraries processed: {len(library_item_counts)} | "
-        f"skipped: {', '.join(skipped_libraries) if skipped_libraries else 'None'}"
+    skipped_libraries = [lib["title"] for lib in libraries if lib["title"] not in selected_libraries]
+    lines.extend(box_line(f"Libraries processed: {len(library_item_counts)} | skipped: {', '.join(skipped_libraries) if skipped_libraries else 'None'}", box_width))
+
+    # Items summary
+    items_str = ", ".join(f"{lib} ({count})" for lib, count in library_item_counts.items())
+    lines.extend(box_line(f"Items: {items_str}", box_width))
+
+    # Metadata summary
+    meta_str = ", ".join(
+        f"{lib} ({summary['complete']}/{summary['total_items']}, {summary['percent_complete']}%, {summary['incomplete']} incomplete)"
+        for lib, summary in metadata_summaries.items()
     )
-    processed_count = sum(library_item_counts.values())
-    logger.info(f"[Summary] Total items processed: {processed_count}")
+    lines.extend(box_line(f"Metadata: {meta_str}", box_width))
 
-    logger.info("[ Per-Library Items Count ]")
-    for lib_name, count in library_item_counts.items():
-        logger.info(f"  - {lib_name}: {count} items processed")
-
-    logger.info("[ Per-Library Metadata Statistics ]")
-    for lib_name, summary in metadata_summaries.items():
-        logger.info(
-            f"  - {lib_name}: {summary['complete']}/{summary['total_items']}, {summary['percent_complete']}% complete, "
-            f"{summary['incomplete']} incomplete"
-        )
-
-    logger.info("[ Per-Library Downloaded Asset Size ]")
-    for lib_name, size in library_filesize.items():
-        logger.info(f"  - {lib_name}: Total {human_readable_size(size)}")
+    # Assets summary
+    assets_str = ", ".join(f"{lib} ({human_readable_size(size)})" for lib, size in library_filesize.items())
     total_asset_size = sum(library_filesize.values())
-    logger.info(f"  - Total assets downloaded: {human_readable_size(total_asset_size)}")
+    assets_line = f"Assets: {assets_str}, Total ({human_readable_size(total_asset_size)})"
+    lines.extend(box_line(assets_line, box_width))
 
-    logger.info("[ Total Cleanup Statistics ]")
+    # Cleanup summary
     if cleanup_orphans:
-        logger.info(f"  - Titles removed from MetaFusion: {orphans_removed}")
-    logger.info("=" * 50)
-
+        lines.extend(box_line(f"Cleanup: Titles removed: {orphans_removed}", box_width))
     if config["settings"].get("dry_run", False):
-        logger.info("[Dry Run] Completed. No files were written.")
-            
+        lines.extend(box_line("[Dry Run] Completed. No files were written.", box_width))
+    lines.append(border)
+    logger.info("\n" + "\n".join(lines))
+
 def meta_summary_banner(logger=None, width=50):
     border = "=" * width
     title = "METAFUSION SUMMARY REPORT".center(width - 6)
