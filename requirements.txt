@@ -1,4 +1,5 @@
 # MetaFusion Requirements
+requests
 psutil
 plexapi
 ruamel.yaml
