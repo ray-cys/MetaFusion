@@ -1,7 +1,7 @@
 import os
-import logging
 from ruamel.yaml import YAML
 from pathlib import Path
+from helper.logging import log_helper_event
 
 # Path to the user configuration file
 CONFIG_FILE = Path(
@@ -19,14 +19,14 @@ DEFAULT_CONFIG = {
         "log_level": "INFO",
     },
     "plex": {
-        "url": "",
-        "token": ""
+        "url": "PLEX_URL",
+        "token": "PLEX_TOKEN",
     },
     "plex_libraries": [
         "Movies", "TV Shows"
     ],
     "tmdb": {
-        "api_key": "",
+        "api_key": "TMDB_API_KEY",
         "language": "en",
         "region": "US",
         "fallback": ["zh", "ja"]
@@ -56,6 +56,24 @@ DEFAULT_CONFIG = {
         "vote_relaxed": 3.5,
         "vote_threshold": 5.0
     },
+    "collection_settings": {
+        "preferred_width": 1000,
+        "preferred_height": 1500,
+        "min_width": 1000,
+        "min_height": 1500,
+        "preferred_vote": 5.0,
+        "vote_relaxed": 1.0,
+        "vote_threshold": 2.0
+    },
+    "collection_bg_settings": {
+        "preferred_width": 1920,
+        "preferred_height": 1080,
+        "min_width": 1920,
+        "min_height": 1080,
+        "preferred_vote": 5.0,
+        "vote_relaxed": 1.0,
+        "vote_threshold": 2.0
+    },
     "background_settings": {
         "preferred_width": 3840,
         "preferred_height": 2160,
@@ -67,7 +85,7 @@ DEFAULT_CONFIG = {
     },
 }
 
-def disabled_features(config, logger):
+def get_disabled_features(config, logger):
     features = [
         (("metadata", "run_basic"), "Metadata Extraction"),
         (("metadata", "run_enhanced"), "Enhanced Metadata Extraction"),
@@ -76,33 +94,40 @@ def disabled_features(config, logger):
         (("assets", "run_background"), "Background Assets Download"),
         (("cleanup", "run_process"), "Titles Cleanup"),
     ]
-    for key, desc in features:
-        if not config.get(key, True):
-            logger.info(f"[Config] {desc} is DISABLED and will not run.")
+    for key_tuple, feature in features:
+        sub_config = config
+        for k in key_tuple:
+            sub_config = sub_config.get(k, None)
+            if sub_config is None:
+                break
+        enabled = bool(sub_config)
+        event = "feature_enabled" if enabled else "feature_disabled"
+        log_helper_event(event, feature=feature, logger=logger)
 
-def warn_unknown(user_cfg, default_cfg, parent_key=""):
+def warn_unknown_keys(user_cfg, default_cfg, parent_key=""):
     for key in user_cfg:
         if key not in default_cfg:
             full_key = f"{parent_key}.{key}" if parent_key else key
-            logging.warning(f"[Config] Unknown config key in config.yml: {full_key}")
+            log_helper_event("unknown_key", key=full_key)
         elif isinstance(user_cfg[key], dict) and isinstance(default_cfg[key], dict):
-            warn_unknown(user_cfg[key], default_cfg[key], parent_key=f"{parent_key}.{key}" if parent_key else key)
+            warn_unknown_keys(user_cfg[key], default_cfg[key], parent_key=f"{parent_key}.{key}" if parent_key else key)
 
-def merge_dicts(default, user):
+def merge_config_dicts(default, user):
     for k, v in user.items():
         if isinstance(v, dict) and isinstance(default.get(k), dict):
-            merge_dicts(default[k], v)
+            merge_config_dicts(default[k], v)
         else:
             default[k] = v
 
-def env_overrides(config, prefix=""):
+def env_variable_overrides(config, prefix=""):
     for key, value in config.items():
         env_key = (prefix + "_" + key).upper() if prefix else key.upper()
         if isinstance(value, dict):
-            env_overrides(value, env_key)
+            env_variable_overrides(value, env_key)
         else:
             env_val = os.environ.get(env_key)
             if env_val is not None:
+                old_val = config[key]
                 if isinstance(value, bool):
                     config[key] = env_val.lower() in ("1", "true", "yes", "on")
                 elif isinstance(value, int):
@@ -117,16 +142,17 @@ def env_overrides(config, prefix=""):
                         config[key] = value
                 else:
                     config[key] = env_val
+                log_helper_event("env_override", env_key=env_key, env_val=env_val, old_val=old_val)
 
-def load_config():
+def load_config_file():
     if not CONFIG_FILE.exists():
         template_path = Path(__file__).parent.parent / "config_template.yml"
         if template_path.exists():
             import shutil
             shutil.copy(template_path, CONFIG_FILE)
-            logging.warning(f"[Config] YAML not found. Copying template to {CONFIG_FILE}. Review and edit configuration.")
+            log_helper_event("yaml_not_found", config_file=CONFIG_FILE)
         else:
-            logging.error("[Config] YAMLs not found. Using default configuration.")
+            log_helper_event("yaml_missing", config_file=CONFIG_FILE)
 
     config = DEFAULT_CONFIG.copy()
     if CONFIG_FILE.exists():
@@ -134,9 +160,13 @@ def load_config():
             try:
                 yaml = YAML()
                 user_config = yaml.load(f) or {}
-                warn_unknown(user_config, DEFAULT_CONFIG)
-                merge_dicts(config, user_config)
+                warn_unknown_keys(user_config, DEFAULT_CONFIG)
+                merge_config_dicts(config, user_config)
+                log_helper_event("config_loaded", config_file=CONFIG_FILE)
             except yaml.YAMLError:
-                logging.error("[Config] Failed to parse YAML. Using default configuration.")
-    env_overrides(config)
+                log_helper_event("yaml_parse_error", config_file=CONFIG_FILE)
+    else:
+        log_helper_event("config_missing", config_file=CONFIG_FILE)
+
+    env_variable_overrides(config)
     return config

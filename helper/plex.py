@@ -1,6 +1,9 @@
+import sys
 import asyncio
 import logging
+from plexapi.server import PlexServer
 from pathlib import Path
+from helper.logging import log_helper_event
 
 PLEX_COUNTRY_OVERRIDES = {
     "US": "United States of America",
@@ -286,12 +289,49 @@ ISO_COUNTRY_NAMES = {
     "ZW": "Zimbabwe",
 }
 
-def plex_country(code):
+def get_plex_country(code):
     return PLEX_COUNTRY_OVERRIDES.get(code) or ISO_COUNTRY_NAMES.get(code) or code
+
+def connect_plex_library(config, logger, selected_libraries=None):
+    if selected_libraries is None:
+        selected_libraries = config.get("plex_libraries", ["Movies", "TV Shows"])
+    try:
+        plex = PlexServer(config["plex"]["url"], config["plex"]["token"])
+        log_helper_event("Plex_connected", logger=logger)
+    except Exception as e:
+        log_helper_event("Plex_connect_failed", error=e, logger=logger)
+        sys.exit(1)
+
+    try:
+        sections = list(plex.library.sections())
+    except Exception as e:
+        log_helper_event("Plex_libraries_retrieved_failed", error=e, logger=logger)
+        sys.exit(1)
+
+    libraries = [{"title": section.title, "type": section.TYPE} for section in sections]
+    library_names = ", ".join(lib["title"] for lib in libraries)
+    log_helper_event("Plex_detected_libraries", libraries=library_names, logger=logger)
+    if not sections:
+        log_helper_event("Plex_no_libraries_found", logger=logger)
+        sys.exit(0)
+    
+    if selected_libraries is not None:
+        filtered_sections = []
+        filtered_libraries = []
+        for section, lib in zip(sections, libraries):
+            if lib['title'] in selected_libraries:
+                filtered_sections.append(section)
+                filtered_libraries.append(lib)
+            else:
+                log_helper_event("Plex_skipping_library", library=lib['title'], logger=logger)
+        sections = filtered_sections
+        libraries = filtered_libraries
+
+    return plex, sections, libraries, selected_libraries
 
 _plex_cache = {}
 
-async def plex_metadata(item, _season_cache=None, _episode_cache=None, _movie_cache=None):
+async def get_plex_metadata(item, _season_cache=None, _episode_cache=None, _movie_cache=None):
     global _plex_cache
     if _season_cache is None:
         _season_cache = {}
@@ -300,29 +340,43 @@ async def plex_metadata(item, _season_cache=None, _episode_cache=None, _movie_ca
     if _movie_cache is None:
         _movie_cache = {}
 
-    item_key = getattr(item, 'ratingKey', id(item))
-    if item_key in _plex_cache:
-        return _plex_cache[item_key]
+    try:
+        item_key = getattr(item, 'ratingKey', id(item))
+        if item_key in _plex_cache:
+            return _plex_cache[item_key]
+    except Exception as e:
+        log_helper_event("Plex_failed_extract_item_id", title=title, year=year, error=e)
 
-    library_section = getattr(item, "librarySection", None)
-    library_name = getattr(library_section, "title", None) or "Unknown"
-    library_type = (getattr(library_section, "type", None) or getattr(item, "type", None) or "unknown").lower()
-    if library_type == "show":
-        library_type = "tv"
+    try:
+        library_section = getattr(item, "librarySection", None)
+        library_name = getattr(library_section, "title", None) or "Unknown"
+        library_type = (getattr(library_section, "type", None) or getattr(item, "type", None) or "unknown").lower()
+        if library_type == "show":
+            library_type = "tv"
+    except Exception as e:
+        log_helper_event("Plex_failed_extract_library_type", library_name=library_name, error=e)
 
     title = getattr(item, "title", None)
     year = getattr(item, "year", None)
     title_year = f"{title} ({year})" if title and year else None
     ratingKey = getattr(item, "ratingKey", None)
 
-    tmdb_id = imdb_id = tvdb_id = None
-    for guid in getattr(item, "guids", []):
-        if guid.id.startswith("tmdb://"):
-            tmdb_id = guid.id.split("://")[1].split("?")[0]
-        elif guid.id.startswith("imdb://"):
-            imdb_id = guid.id.split("://")[1].split("?")[0]
-        elif guid.id.startswith("tvdb://"):
-            tvdb_id = guid.id.split("://")[1].split("?")[0]
+    try:
+        tmdb_id = imdb_id = tvdb_id = None
+        for guid in getattr(item, "guids", []):
+            if guid.id.startswith("tmdb://"):
+                tmdb_id = guid.id.split("://")[1].split("?")[0]
+            elif guid.id.startswith("imdb://"):
+                imdb_id = guid.id.split("://")[1].split("?")[0]
+            elif guid.id.startswith("tvdb://"):
+                tvdb_id = guid.id.split("://")[1].split("?")[0]
+    except Exception as e:
+        log_helper_event("Plex_failed_extract_ids", title=title, year=year, error=e)
+
+    missing_ids = [name for name, val in [("TMDb", tmdb_id), ("IMDb", imdb_id), ("TVDb", tvdb_id)] if not val]
+    found_ids = [f"{name}: {val}" for name, val in [("TMDb", tmdb_id), ("IMDb", imdb_id), ("TVDb", tvdb_id)] if val]
+    if missing_ids:
+        log_helper_event("Plex_missing_ids", title=title, year=year, missing_ids=", ".join(missing_ids), found_ids=", ".join(found_ids) if found_ids else "None")
 
     movie_path = None
     movie_dir = None
@@ -338,7 +392,7 @@ async def plex_metadata(item, _season_cache=None, _episode_cache=None, _movie_ca
                 movie_path = Path(file_path).parent.name
                 movie_dir = str(Path(file_path).parent)
         except Exception as e:
-            logging.warning(f"[Plex] Failed to extract movie directory for {title} ({year}): {e}")
+            log_helper_event("Plex_failed_extract_movie_dir", title=title, year=year, error=e)
 
     show_path = None
     show_dir = None
@@ -363,7 +417,7 @@ async def plex_metadata(item, _season_cache=None, _episode_cache=None, _movie_ca
                 if found:
                     break
         except Exception as e:
-            logging.warning(f"[Plex] Failed to extract show directory for {title} ({year}): {e}")
+            log_helper_event("Plex_failed_extract_show_dir", title=title, year=year, error=e)
 
     seasons_episodes = None
     if library_type in ("show", "tv") or hasattr(item, "seasons"):
@@ -385,7 +439,7 @@ async def plex_metadata(item, _season_cache=None, _episode_cache=None, _movie_ca
                 episode_numbers = [ep.episodeNumber for ep in episodes]
                 seasons_episodes[season.index] = episode_numbers
         except Exception as e:
-            logging.warning(f"[Plex] Failed to extract seasons/episodes for {title} ({year}): {e}")
+            log_helper_event("Plex_failed_extract_seasons_episodes", title=title, year=year, error=e)
 
     result = {
         "library_name": library_name,
@@ -403,8 +457,14 @@ async def plex_metadata(item, _season_cache=None, _episode_cache=None, _movie_ca
         "show_dir": show_dir,
         "seasons_episodes": seasons_episodes,
     }
-    for key in ["title", "year", "movie_path", "tmdb_id"]:
-        if not result.get(key):
-            logging.warning(f"[Plex] Missing {key} in extracted metadata for {result.get('title', 'Unknown')}")
+    critical_fields = ["title", "year", "tmdb_id"]
+    if library_type in ("movie",):
+        critical_fields.append("movie_path")
+    if library_type in ("show", "tv"):
+        critical_fields.append("show_path")
+
+    missing_critical = [key for key in critical_fields if not result.get(key)]
+    if missing_critical:
+        log_helper_event("Plex_critical_metadata_missing", item_key=item_key, missing_critical=", ".join(missing_critical), result=result, logger=logging.getLogger("Plex"))
     _plex_cache[item_key] = result
     return result

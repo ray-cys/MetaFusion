@@ -55,6 +55,20 @@ poster_settings:
   vote_relaxed: 3.5
   vote_threshold: 5.0
 
+# Collection selection preferences (Only if run_collection is true)
+collection_settings:
+  min_width: 1000
+  min_height: 1500
+  vote_relaxed: 1.0
+  vote_threshold: 2.0
+
+# Collection background preferences (Only if run_collection is true)
+collection_bg_settings:
+  min_width: 1920
+  min_height: 1080
+  vote_relaxed: 1.0
+  vote_threshold: 2.0
+
 # Background selection preferences (Only if run_background is true)
 background_settings:
   preferred_width: 3840

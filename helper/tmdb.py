@@ -1,15 +1,14 @@
 import orjson
-import logging
 import asyncio
+import hashlib
 from aiolimiter import AsyncLimiter
-from helper.config import load_config
-from helper.cache import load_cache, save_cache
+from helper.logging import log_helper_event
 
-config = load_config()
 tmdb_response_cache = {}
 tmdb_limiter = AsyncLimiter(40, 10)
 
 async def tmdb_api_request(
+    config,
     endpoint_or_url,
     params=None,
     retries=3,
@@ -21,11 +20,11 @@ async def tmdb_api_request(
     cache=True,
     raw=False,
     session=None,
-    **kwargs
+    **kwargs,
 ):
-    import hashlib
     if session is None:
-        raise ValueError("No aiohttp session provided for TMDb API request")
+        log_helper_event("TMDb_no_session")
+        raise ValueError
 
     if endpoint_or_url.startswith("http"):
         url = endpoint_or_url
@@ -33,11 +32,13 @@ async def tmdb_api_request(
         cache_key = f"{url}:{orjson.dumps(query, option=orjson.OPT_SORT_KEYS).decode()}"
     else:
         if api_key is None:
-            api_key = config["tmdb"]["api_key"]
+            api_key = config.get("tmdb", {}).get("api_key")
+            if not api_key:
+                log_helper_event("TMDb_no_api_key", tmdb_config=config.get('tmdb'))
         if language is None:
-            language = config["tmdb"].get("language", "en")
+            language = config.get("tmdb", {}).get("language", "en")
         if region is None:
-            region = config["tmdb"].get("region", "US")
+            region = config.get("tmdb", {}).get("region", "US")
         url = f"https://api.themoviedb.org/3/{endpoint_or_url}"
         query = {"api_key": api_key}
         if params is None:
@@ -51,11 +52,12 @@ async def tmdb_api_request(
 
     cache_hash = hashlib.sha256(cache_key.encode()).hexdigest()
     if cache and cache_hash in tmdb_response_cache:
-        logging.debug(f"[TMDb] Returning cached response for {url} params: {params}")
+        log_helper_event("TMDb_cache_hit", url=url, params=params)
         return tmdb_response_cache[cache_hash]
 
     for attempt in range(1, retries + 1):
         try:
+            log_helper_event("TMDb_request", url=url, query=query, attempt=attempt, retries=retries)
             async with tmdb_limiter:
                 async with session.get(url, params=query, **kwargs) as response:
                     if response.status == 200:
@@ -65,19 +67,20 @@ async def tmdb_api_request(
                             data = await response.json()
                         if cache:
                             tmdb_response_cache[cache_hash] = data
+                        log_helper_event("TMDb_success", url=url, attempt=attempt)
                         return data
                     elif response.status == 429:
                         retry_after = int(response.headers.get("Retry-After", delay))
-                        logging.warning(f"[TMDb] Rate limited (HTTP 429). Sleeping {retry_after}s before retry...")
+                        log_helper_event("TMDb_rate_limited", retry_after=retry_after, query=query)
                         await asyncio.sleep(retry_after)
                     else:
-                        logging.warning(f"[TMDb] Non-200 response {response.status} for {url}")
+                        body = await response.text()
+                        log_helper_event("TMDb_non_200", status=response.status, url=url, query=query, body=body[:500])
         except Exception as e:
-            logging.warning(f"[TMDb] Attempt {attempt}: Request failed for URL {url}: {e}")
+            log_helper_event("TMDb_request_failed", attempt=attempt, url=url, query=query, error=e)
         if attempt < retries:
             sleep_time = delay * (backoff_factor ** (attempt - 1))
-            logging.info(f"[TMDb] Retrying in {sleep_time}s... (Attempt {attempt + 1}/{retries})")
+            log_helper_event("TMDb_retrying", sleep_time=sleep_time, next_attempt=attempt + 1, retries=retries)
             await asyncio.sleep(sleep_time)
-    logging.error(f"[TMDb] Failed after {retries} attempts for {url}")
+    log_helper_event("TMDb_failed", retries=retries, url=url, query=query)
     return None
-
