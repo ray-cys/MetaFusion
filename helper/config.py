@@ -1,4 +1,5 @@
 import os
+import logging
 from ruamel.yaml import YAML
 from pathlib import Path
 from helper.logging import log_helper_event
@@ -47,39 +48,21 @@ DEFAULT_CONFIG = {
     "cleanup": {
         "run_process": False
     },
-    "poster_settings": {
-        "preferred_width": 2000,
-        "preferred_height": 3000,
+    "poster_set": {
+        "max_width": 2000,
+        "max_height": 3000,
         "min_width": 1000,
         "min_height": 1500,
-        "preferred_vote": 5.0,
+        "prefer_vote": 5.0,
         "vote_relaxed": 3.5,
         "vote_threshold": 5.0
     },
-    "collection_settings": {
-        "preferred_width": 1000,
-        "preferred_height": 1500,
-        "min_width": 1000,
-        "min_height": 1500,
-        "preferred_vote": 5.0,
-        "vote_relaxed": 1.0,
-        "vote_threshold": 2.0
-    },
-    "collection_bg_settings": {
-        "preferred_width": 1920,
-        "preferred_height": 1080,
+    "background_set": {
+        "max_width": 3840,
+        "max_height": 2160,
         "min_width": 1920,
         "min_height": 1080,
-        "preferred_vote": 5.0,
-        "vote_relaxed": 1.0,
-        "vote_threshold": 2.0
-    },
-    "background_settings": {
-        "preferred_width": 3840,
-        "preferred_height": 2160,
-        "min_width": 1920,
-        "min_height": 1080,
-        "preferred_vote": 5.0,
+        "prefer_vote": 5.0,
         "vote_relaxed": 3.5,
         "vote_threshold": 5.0
     },
@@ -102,7 +85,22 @@ def get_disabled_features(config, logger):
                 break
         enabled = bool(sub_config)
         event = "feature_enabled" if enabled else "feature_disabled"
-        log_helper_event(event, feature=feature, logger=logger)
+        log_helper_event(event, feature=feature)
+
+def config_enabled(config, feature):
+    feature_map = {
+        "dry_run": lambda c: c.get("settings", {}).get("dry_run", False),
+        "metadata_basic": lambda c: c.get("metadata", {}).get("run_basic", True),
+        "metadata_enhanced": lambda c: c.get("metadata", {}).get("run_enhanced", True),
+        "poster": lambda c: c.get("assets", {}).get("run_poster", True),
+        "season": lambda c: c.get("assets", {}).get("run_season", True),
+        "background": lambda c: c.get("assets", {}).get("run_background", False),
+        "collection": lambda c: c.get("assets", {}).get("run_collection", False),
+        "cleanup": lambda c: c.get("cleanup", {}).get("run_process", False),
+    }
+    if feature not in feature_map:
+        raise ValueError
+    return feature_map[feature](config)
 
 def warn_unknown_keys(user_cfg, default_cfg, parent_key=""):
     for key in user_cfg:

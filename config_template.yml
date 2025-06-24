@@ -46,35 +46,21 @@ cleanup:
   run_process: true
 
 # Poster selection preferences (Only if run_poster is true)
-poster_settings:
-  preferred_width: 2000
-  preferred_height: 3000
+poster_set:
+  max_width: 2000
+  max_height: 3000
   min_width: 1000
   min_height: 1500
-  preferred_vote: 5.0
+  prefer_vote: 5.0
   vote_relaxed: 3.5
   vote_threshold: 5.0
 
-# Collection selection preferences (Only if run_collection is true)
-collection_settings:
-  min_width: 1000
-  min_height: 1500
-  vote_relaxed: 1.0
-  vote_threshold: 2.0
-
-# Collection background preferences (Only if run_collection is true)
-collection_bg_settings:
-  min_width: 1920
-  min_height: 1080
-  vote_relaxed: 1.0
-  vote_threshold: 2.0
-
 # Background selection preferences (Only if run_background is true)
-background_settings:
-  preferred_width: 3840
-  preferred_height: 2160
+background_set:
+  max_width: 3840
+  max_height: 2160
   min_width: 1920
   min_height: 1080
-  preferred_vote: 5.0
+  prefer_vote: 5.0
   vote_relaxed: 3.5
   vote_threshold: 5.0

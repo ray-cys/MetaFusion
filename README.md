@@ -101,21 +101,21 @@ path: "/path/to/assets"
 
 # Poster selection preferences
 poster_settings:
-  preferred_width: 2000
-  preferred_height: 3000
+  max_width: 2000
+  max_height: 3000
   min_width: 1000
   min_height: 1500
-  preferred_vote: 5.0
+  prefer_vote: 5.0
   vote_relaxed: 3.5
   vote_threshold: 5.0
 
 # Background selection preferences
 background_settings:
-  preferred_width: 3840
-  preferred_height: 2160
+  max_width: 3840
+  max_height: 2160
   min_width: 1920
   min_height: 1080
-  preferred_vote: 5.0
+  prefer_vote: 5.0
   vote_relaxed: 3.5
   vote_threshold: 5.0
 

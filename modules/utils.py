@@ -40,17 +40,8 @@ def get_meta_field(data, field, default=None, path=None):
         return default
     
 def get_best_poster(
-    config,
-    images,
-    preferred_language="en",
-    fallback=None,
-    preferred_vote=None,
-    preferred_width=None,
-    preferred_height=None,
-    relaxed_vote=None,
-    min_width=None,
-    min_height=None,
-    is_collection=False,
+    config, images, preferred_language="en", fallback=None, prefer_vote=None, max_width=None,
+    max_height=None, relaxed_vote=None, min_width=None, min_height=None, is_collection=False,
 ):
     if not images:
         return None
@@ -59,18 +50,12 @@ def get_best_poster(
     if isinstance(fallback, str):
         fallback = [fallback]
     language_priority = [preferred_language] + fallback
-    poster_sel = config["poster_settings"]
+    poster_sel = config["poster_set"]
+    default_sel = poster_sel
 
-    if is_collection:
-        poster_sel = config.get("collection_settings", config["poster_settings"])
-        default_sel = config["poster_settings"]
-    else:
-        poster_sel = config["poster_settings"]
-        default_sel = poster_sel
-
-    preferred_vote = preferred_vote if preferred_vote is not None else poster_sel.get("preferred_vote", default_sel.get("preferred_vote", 0))
-    preferred_width = preferred_width if preferred_width is not None else poster_sel.get("preferred_width", default_sel.get("preferred_width", 0))
-    preferred_height = preferred_height if preferred_height is not None else poster_sel.get("preferred_height", default_sel.get("preferred_height", 0))
+    prefer_vote = prefer_vote if prefer_vote is not None else poster_sel.get("prefer_vote", default_sel.get("prefer_vote", 0))
+    max_width = max_width if max_width is not None else poster_sel.get("max_width", default_sel.get("max_width", 0))
+    max_height = max_height if max_height is not None else poster_sel.get("max_height", default_sel.get("max_height", 0))
     relaxed_vote = relaxed_vote if relaxed_vote is not None else poster_sel.get("vote_relaxed", default_sel.get("vote_relaxed", 0))
     min_width = min_width if min_width is not None else poster_sel.get("min_width", default_sel.get("min_width", 0))
     min_height = min_height if min_height is not None else poster_sel.get("min_height", default_sel.get("min_height", 0))
@@ -82,11 +67,12 @@ def get_best_poster(
             break
     else:
         images_to_consider = images
+        
     filtered = [
         img for img in images_to_consider
-        if img.get("vote_average", 0) >= preferred_vote and
-           img.get("width", 0) >= preferred_width and
-           img.get("height", 0) >= preferred_height
+        if img.get("vote_average", 0) >= prefer_vote and
+           img.get("width", 0) >= max_width and
+           img.get("height", 0) >= max_height
     ]
     if filtered:
         best = max(filtered, key=lambda x: (x["vote_average"], x["width"] * x["height"]))
@@ -113,42 +99,34 @@ def get_best_poster(
     if images_to_consider:
         best = max(images_to_consider, key=lambda x: x["width"] * x["height"])
         return best
+    
+    if images_to_consider:
+        return images_to_consider[0]
     else:
         return None
 
 def get_best_background(
-    config,
-    images,
-    preferred_vote=None,
-    preferred_width=None,
-    preferred_height=None,
-    relaxed_vote=None,
-    min_width=None,
-    min_height=None,
-    is_collection=False,
+    config, images, prefer_vote=None, max_width=None, max_height=None, relaxed_vote=None,
+    min_width=None, min_height=None, is_collection=False,
 ):
     if not images:
         return None
     
-    if is_collection:
-        bg_sel = config.get("collection_bg_settings", config["background_settings"])
-        default_sel = config["background_settings"]
-    else:
-        bg_sel = config["background_settings"]
-        default_sel = bg_sel
+    bg_sel = config["background_set"]
+    default_sel = bg_sel
         
-    preferred_vote = preferred_vote if preferred_vote is not None else bg_sel.get("preferred_vote", default_sel.get("preferred_vote", 0))
-    preferred_width = preferred_width if preferred_width is not None else bg_sel.get("preferred_width", default_sel.get("preferred_width", 0))
-    preferred_height = preferred_height if preferred_height is not None else bg_sel.get("preferred_height", default_sel.get("preferred_height", 0))
+    prefer_vote = prefer_vote if prefer_vote is not None else bg_sel.get("prefer_vote", default_sel.get("prefer_vote", 0))
+    max_width = max_width if max_width is not None else bg_sel.get("max_width", default_sel.get("max_width", 0))
+    max_height = max_height if max_height is not None else bg_sel.get("max_height", default_sel.get("max_height", 0))
     relaxed_vote = relaxed_vote if relaxed_vote is not None else bg_sel.get("vote_relaxed", default_sel.get("vote_relaxed", 0))
     min_width = min_width if min_width is not None else bg_sel.get("min_width", default_sel.get("min_width", 0))
     min_height = min_height if min_height is not None else bg_sel.get("min_height", default_sel.get("min_height", 0))
     
     filtered = [
         img for img in images
-        if img.get("vote_average", 0) >= preferred_vote and
-           img.get("width", 0) >= preferred_width and
-           img.get("height", 0) >= preferred_height
+        if img.get("vote_average", 0) >= prefer_vote and
+           img.get("width", 0) >= max_width and
+           img.get("height", 0) >= max_height
     ]
     if filtered:
         best = max(filtered, key=lambda x: (x["vote_average"], x["width"] * x["height"]))
@@ -167,17 +145,15 @@ def get_best_background(
     if images:
         best = max(images, key=lambda x: (x["vote_average"], x["width"] * x["height"]))
         return best
+
+    if images:
+        return images[0]
     else:
         return None
 
 def smart_asset_upgrade(
-    config,
-    asset_path,
-    new_image_data,
-    new_image_path=None,
-    cache_key=None,
-    asset_type="poster",
-    library_type=None,
+    config, asset_path, new_image_data, new_image_path=None, cache_key=None,
+    asset_type="poster", library_type=None, season_number=None
 ):
     from PIL import Image
     new_width = new_image_data.get("width", 0)
@@ -185,20 +161,20 @@ def smart_asset_upgrade(
     new_votes = new_image_data.get("vote_average", 0)
     if library_type == "Collection":
         if asset_type == "collection":
-            vote_threshold = config["poster_settings"].get("vote_threshold", 5.0)
+            vote_threshold = config["poster_set"].get("vote_threshold", 5.0)
             cache_key_name = "collection_average"
         elif asset_type == "collection_background":
-            vote_threshold = config["background_settings"].get("vote_threshold", 5.0)
+            vote_threshold = config["background_set"].get("vote_threshold", 5.0)
             cache_key_name = "collection_bg_average"
         else:
-            vote_threshold = config["poster_settings"].get("vote_threshold", 5.0)
+            vote_threshold = config["poster_set"].get("vote_threshold", 5.0)
             cache_key_name = "collection_average"
     else:
         if asset_type == "background":
-            vote_threshold = config["background_settings"].get("vote_threshold", 5.0)
+            vote_threshold = config["background_set"].get("vote_threshold", 5.0)
             cache_key_name = "bg_average"
         else:
-            vote_threshold = config["poster_settings"].get("vote_threshold", 5.0)
+            vote_threshold = config["poster_set"].get("vote_threshold", 5.0)
             cache_key_name = "poster_average"
     cached_votes = 0
     if cache_key:
@@ -238,7 +214,8 @@ def smart_asset_upgrade(
 
 async def download_poster(config, image_path, save_path, session=None, retries=3):
     if session is None:
-        raise ValueError("No aiohttp session provided for asset download.")
+        url = f"https://image.tmdb.org/t/p/original{image_path}"
+        return False, url, None, "HTTP session failed"
     url = f"https://image.tmdb.org/t/p/original{image_path}"
     last_exception = None
     for attempt in range(retries):
