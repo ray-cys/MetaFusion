@@ -1,160 +1,10 @@
-import logging
-import hashlib
-import uuid
+import asyncio, hashlib, uuid
 from pathlib import Path
-from helper.config import load_config
-from helper.plex import safe_title_year
+from helper.config import load_config_file
 from helper.cache import load_cache
-
-config = load_config()
-
-def get_best_poster(
-    images,
-    preferred_language="en",
-    fallback=None,
-    preferred_vote=None,
-    preferred_width=None,
-    preferred_height=None,
-    relaxed_vote=None,
-    min_width=None,
-    min_height=None
-):
-    """
-    Select the best poster image from a list based on language and quality preferences.
-    """
-    if not images:
-        logging.debug("[Assets] No images available to select the best poster.")
-        return None
-
-    # Ensure fallback is always a list
-    if fallback is None:
-        fallback = config["tmdb"].get("fallback", [])
-    if isinstance(fallback, str):
-        fallback = [fallback]
-    language_priority = [preferred_language] + fallback
-
-    logging.debug(f"[Assets] Language priority for posters: {language_priority}")
-
-    # Use config defaults if not provided
-    poster_sel = config["poster_selection"]
-    preferred_vote = preferred_vote if preferred_vote is not None else poster_sel["preferred_vote"]
-    preferred_width = preferred_width if preferred_width is not None else poster_sel["preferred_width"]
-    preferred_height = preferred_height if preferred_height is not None else poster_sel["preferred_height"]
-    relaxed_vote = relaxed_vote if relaxed_vote is not None else poster_sel["vote_relaxed"]
-    min_width = min_width if min_width is not None else poster_sel["min_width"]
-    min_height = min_height if min_height is not None else poster_sel["min_height"]
-
-    # Filter images by language priority
-    for lang in language_priority:
-        language_filtered = [img for img in images if img.get("iso_639_1") == lang]
-        logging.debug(f"[Assets] Found {len(language_filtered)} posters for language '{lang}'")
-        if language_filtered:
-            images_to_consider = language_filtered
-            break
-    else:
-        images_to_consider = images
-        logging.debug(f"[Assets] No posters found for preferred or fallback languages, considering all posters.")
-
-    # High quality filter
-    filtered = [
-        img for img in images_to_consider
-        if img.get("vote_average", 0) >= preferred_vote and
-           img.get("width", 0) >= preferred_width and
-           img.get("height", 0) >= preferred_height
-    ]
-    if filtered:
-        best = max(filtered, key=lambda x: (x["vote_average"], x["width"] * x["height"]))
-        logging.debug(f"[Assets] Selected high-quality poster: {best}")
-        return best
-
-    # Relaxed filter
-    filtered = [
-        img for img in images_to_consider
-        if img.get("vote_average", 0) >= relaxed_vote and
-           img.get("width", 0) >= min_width and
-           img.get("height", 0) >= min_height
-    ]
-    if filtered:
-        best = max(filtered, key=lambda x: (x["vote_average"], x["width"] * x["height"]))
-        logging.debug(f"[Assets] Selected fallback poster: {best}")
-        return best
-
-    # Fallback: poster with minimum width/height
-    filtered = [
-        img for img in images_to_consider
-        if img.get("width", 0) >= min_width and img.get("height", 0) >= min_height
-    ]
-    if filtered:
-        best = max(filtered, key=lambda x: x["width"] * x["height"])
-        logging.debug(f"[Assets] Selected poster meeting minimum size as fallback: {best}")
-        return best
-
-    # Fallback: poster with the largest width and height
-    if images_to_consider:
-        best = max(images_to_consider, key=lambda x: x["width"] * x["height"])
-        logging.debug(f"[Assets] Selected poster meeting largest size as final fallback: {best}")
-        return best
-    else:
-        logging.warning("[Assets] No posters available at all after all filters.")
-        return None
-
-def get_best_background(
-    images,
-    preferred_vote=None,
-    preferred_width=None,
-    preferred_height=None,
-    relaxed_vote=None,
-    min_width=None,
-    min_height=None
-):
-    """
-    Select the best background image from a list based on quality preferences.
-    """
-    if not images:
-        logging.debug("[Assets] No images available to select the best background.")
-        return None
-
-    bg_sel = config["background_selection"]
-    preferred_vote = preferred_vote if preferred_vote is not None else bg_sel["preferred_vote"]
-    preferred_width = preferred_width if preferred_width is not None else bg_sel["preferred_width"]
-    preferred_height = preferred_height if preferred_height is not None else bg_sel["preferred_height"]
-    relaxed_vote = relaxed_vote if relaxed_vote is not None else bg_sel["vote_relaxed"]
-    min_width = min_width if min_width is not None else bg_sel["min_width"]
-    min_height = min_height if min_height is not None else bg_sel["min_height"]
-
-    # High quality filter
-    filtered = [
-        img for img in images
-        if img.get("vote_average", 0) >= preferred_vote and
-           img.get("width", 0) >= preferred_width and
-           img.get("height", 0) >= preferred_height
-    ]
-    if filtered:
-        best = max(filtered, key=lambda x: (x["vote_average"], x["width"] * x["height"]))
-        logging.debug(f"[Assets] Selected high-quality background: {best}")
-        return best
-
-    # Relaxed filter
-    filtered = [
-        img for img in images
-        if img.get("vote_average", 0) >= relaxed_vote and
-           img.get("width", 0) >= min_width and
-           img.get("height", 0) >= min_height
-    ]
-    if filtered:
-        best = max(filtered, key=lambda x: (x["vote_average"], x["width"] * x["height"]))
-        logging.debug(f"[Assets] Selected fallback background: {best}")
-        return best
-
-    # Fallback: any background
-    best = max(images, key=lambda x: (x["vote_average"], x["width"] * x["height"]))
-    logging.debug(f"[Assets] Selected any available background as final fallback: {best}")
-    return best
+from helper.tmdb import tmdb_api_request
 
 def smart_meta_update(existing_metadata, new_metadata):
-    """
-    Compare existing and new metadata, returning a list of changed fields.
-    """
     changed_fields = []
     for key, new_value in new_metadata.items():
         existing_value = existing_metadata.get(key)
@@ -178,113 +28,254 @@ def smart_meta_update(existing_metadata, new_metadata):
                 changed_fields.append(key)
     return changed_fields
 
-def should_upgrade(
-    asset_path,
-    new_image_data,
-    new_image_path=None,
-    cache_key=None,
-    item=None,
-    season_number=None,
-    asset_type="poster"
+def get_meta_field(data, field, default=None, path=None):
+    try:
+        if path:
+            for key in path:
+                data = data.get(key, {})
+        return data.get(field, default)
+    except Exception:
+        return default
+    
+def get_best_poster(
+    config, images, preferred_language="en", fallback=None, prefer_vote=None, max_width=None,
+    max_height=None, relaxed_vote=None, min_width=None, min_height=None,
+):
+    if not images:
+        return None
+    if fallback is None:
+        fallback = config["tmdb"].get("fallback", [])
+    if isinstance(fallback, str):
+        fallback = [fallback]
+    language_priority = [preferred_language] + fallback
+    poster_sel = config["poster_set"]
+    default_sel = poster_sel
+
+    prefer_vote = prefer_vote if prefer_vote is not None else poster_sel.get("prefer_vote", default_sel.get("prefer_vote", 0))
+    max_width = max_width if max_width is not None else poster_sel.get("max_width", default_sel.get("max_width", 0))
+    max_height = max_height if max_height is not None else poster_sel.get("max_height", default_sel.get("max_height", 0))
+    relaxed_vote = relaxed_vote if relaxed_vote is not None else poster_sel.get("vote_relaxed", default_sel.get("vote_relaxed", 0))
+    min_width = min_width if min_width is not None else poster_sel.get("min_width", default_sel.get("min_width", 0))
+    min_height = min_height if min_height is not None else poster_sel.get("min_height", default_sel.get("min_height", 0))
+    
+    for lang in language_priority:
+        language_filtered = [img for img in images if img.get("iso_639_1") == lang]
+        if language_filtered:
+            images_to_consider = language_filtered
+            break
+    else:
+        images_to_consider = images
+        
+    filtered = [
+        img for img in images_to_consider
+        if img.get("vote_average", 0) >= prefer_vote and
+           img.get("width", 0) >= max_width and
+           img.get("height", 0) >= max_height
+    ]
+    if filtered:
+        best = max(filtered, key=lambda x: (x["vote_average"], x["width"] * x["height"]))
+        return best
+    
+    filtered = [
+        img for img in images_to_consider
+        if img.get("vote_average", 0) >= relaxed_vote and
+           img.get("width", 0) >= min_width and
+           img.get("height", 0) >= min_height
+    ]
+    if filtered:
+        best = max(filtered, key=lambda x: (x["vote_average"], x["width"] * x["height"]))
+        return best
+    
+    filtered = [
+        img for img in images_to_consider
+        if img.get("width", 0) >= min_width and img.get("height", 0) >= min_height
+    ]
+    if filtered:
+        best = max(filtered, key=lambda x: x["width"] * x["height"])
+        return best
+    
+    if images_to_consider:
+        best = max(images_to_consider, key=lambda x: x["width"] * x["height"])
+        return best
+    
+    if images_to_consider:
+        return images_to_consider[0]
+    else:
+        return None
+
+def get_best_background(
+    config, images, prefer_vote=None, max_width=None, max_height=None, relaxed_vote=None,
+    min_width=None, min_height=None
+):
+    if not images:
+        return None
+    
+    bg_sel = config["background_set"]
+    default_sel = bg_sel
+        
+    prefer_vote = prefer_vote if prefer_vote is not None else bg_sel.get("prefer_vote", default_sel.get("prefer_vote", 0))
+    max_width = max_width if max_width is not None else bg_sel.get("max_width", default_sel.get("max_width", 0))
+    max_height = max_height if max_height is not None else bg_sel.get("max_height", default_sel.get("max_height", 0))
+    relaxed_vote = relaxed_vote if relaxed_vote is not None else bg_sel.get("vote_relaxed", default_sel.get("vote_relaxed", 0))
+    min_width = min_width if min_width is not None else bg_sel.get("min_width", default_sel.get("min_width", 0))
+    min_height = min_height if min_height is not None else bg_sel.get("min_height", default_sel.get("min_height", 0))
+    
+    filtered = [
+        img for img in images
+        if img.get("vote_average", 0) >= prefer_vote and
+           img.get("width", 0) >= max_width and
+           img.get("height", 0) >= max_height
+    ]
+    if filtered:
+        best = max(filtered, key=lambda x: (x["vote_average"], x["width"] * x["height"]))
+        return best
+    
+    filtered = [
+        img for img in images
+        if img.get("vote_average", 0) >= relaxed_vote and
+           img.get("width", 0) >= min_width and
+           img.get("height", 0) >= min_height
+    ]
+    if filtered:
+        best = max(filtered, key=lambda x: (x["vote_average"], x["width"] * x["height"]))
+        return best
+    
+    if images:
+        best = max(images, key=lambda x: (x["vote_average"], x["width"] * x["height"]))
+        return best
+
+    if images:
+        return images[0]
+    else:
+        return None
+
+def smart_asset_upgrade(
+    config, asset_path, new_image_data, new_image_path=None, cache_key=None,
+    asset_type="poster", library_type=None, season_number=None
 ):
     from PIL import Image
-    """
-    Determine if the new poster image should replace the existing one.
-    """
     new_width = new_image_data.get("width", 0)
     new_height = new_image_data.get("height", 0)
     new_votes = new_image_data.get("vote_average", 0)
-    label = safe_title_year(item)
-    if season_number is not None:
-        label = f"{label} Season {season_number}"
     if asset_type == "background":
-        vote_threshold = config["background_selection"].get("vote_average_threshold", 5.0)
+        vote_threshold = config["background_set"].get("vote_threshold", 5.0)
         cache_key_name = "bg_average"
     else:
-        vote_threshold = config["poster_selection"].get("vote_average_threshold", 5.0)
+        vote_threshold = config["poster_set"].get("vote_threshold", 5.0)
         cache_key_name = "poster_average"
-
-    # Compare to cached vote_average if available
     cached_votes = 0
     if cache_key:
         cache = load_cache()
         cached = cache.get(cache_key)
         if isinstance(cached, dict):
             cached_votes = cached.get(cache_key_name, 0)
-
-    # Only upgrade if new vote_average is higher than cached,
-    # Or if there is no cached value and new_votes meets threshold
+    context = {
+        "new_width": new_width,
+        "new_height": new_height,
+        "new_votes": new_votes,
+        "cached_votes": cached_votes,
+        "vote_threshold": vote_threshold,
+        "asset_path_exists": asset_path.exists(),
+        "new_image_path_exists": new_image_path.exists() if new_image_path else False
+    }
     if new_votes > cached_votes:
-        logging.debug(f"[Assets] {label} upgraded based on vote average: {new_votes} (Cached: {cached_votes}, Threshold: {vote_threshold})")
-        return not config.get("dry_run", False)
+        return True, "UPGRADE_VOTES", context
     elif cached_votes == 0 and new_votes >= vote_threshold:
-        logging.debug(f"[Assets] {label} upgraded based on vote average threshold: {new_votes} (Threshold: {vote_threshold})")
-        return not config.get("dry_run", False)
-
-    # If no existing poster, always upgrade
+        return True, "UPGRADE_THRESHOLD", context
     if not asset_path.exists():
-        logging.info(f"[Assets] No existing poster for {label}. Downloading new poster.")
-        return not config.get("dry_run", False)
-
-    # If new image file exists, compare dimensions
+        return True, "NO_EXISTING_ASSET", context
     if new_image_path and new_image_path.exists():
         try:
             with Image.open(new_image_path) as img:
                 existing_width, existing_height = img.size
+            context["existing_width"] = existing_width
+            context["existing_height"] = existing_height
         except Exception as e:
-            logging.warning(f"[Assets] Failed to read temp image for comparison: {e}")
-            return not config.get("dry_run", False)
+            context["error"] = str(e)
+            return False, "ERROR_IMAGE_COMPARE", context
     else:
-        logging.debug(f"[Assets] No new_image_path provided for comparison. Skipping detailed check.")
-        return False
+        return False, "NO_IMAGE_FOR_COMPARE", context
+    if new_width > context.get("existing_width", 0) or new_height > context.get("existing_height", 0):
+        return True, "UPGRADE_DIMENSIONS", context
+    return False, "NO_UPGRADE_NEEDED", context
 
-    # Prefer new image if it's larger than existing
-    if new_width > existing_width or new_height > existing_height:
-        logging.debug(
-            f"[Assets] {label}: New {new_width}x{new_height}, "
-            f"Existing {existing_width}x{existing_height}"
-        )
-        return not config.get("dry_run", False)
+async def download_poster(config, image_path, save_path, session=None, retries=3):
+    if session is None:
+        url = f"https://image.tmdb.org/t/p/original{image_path}"
+        return False, url, None, "HTTP session failed"
+    url = f"https://image.tmdb.org/t/p/original{image_path}"
+    last_exception = None
+    for attempt in range(retries):
+        try:
+            response_content = await tmdb_api_request(config, url, raw=True, cache=False, session=session)
+            if response_content:
+                result, error = await save_poster(response_content, save_path)
+                if result is True or result == "ALREADY_UP_TO_DATE":
+                    return True, url, 200, error
+                else:
+                    last_exception = Exception(error or "File not saved after download")
+            else:
+                last_exception = Exception("Empty response from TMDb")
+        except Exception as e:
+            last_exception = e
+        await asyncio.sleep(1)
+    status = getattr(last_exception, "status", None)
+    return False, url, status, str(last_exception) if last_exception else None
 
-    logging.debug(f"[Assets] No upgrade needed for {safe_title_year(item)}. Existing image meets criteria.")
-    return False
+def get_asset_path(config, meta, asset_type="poster", season_number=None):
+    mode = config["assets"].get("mode", "kometa")
+    library_type = meta.get("library_type")
+    show_path = meta.get("show_path")
+    movie_path = meta.get("movie_path")
+    assets_path = Path(config["assets"]["path"])
 
-def generate_temp_path(library_name, extension="jpg"):
-    """
-    Generate a temporary file path for storing a poster image.
-    """
-    assets_path = Path(config["assets_path"])
+    if mode == "plex":
+        if asset_type == "poster":
+            if library_type == "movie":
+                return Path(meta["movie_dir"]) / "poster.jpg"
+            elif library_type in ("show", "tv"):
+                return Path(meta["show_dir"]) / "poster.jpg"
+        elif asset_type == "background":
+            if library_type == "movie":
+                return Path(meta["movie_dir"]) / "fanart.jpg"
+            elif library_type in ("show", "tv"):
+                return Path(meta["show_dir"]) / "fanart.jpg"
+        elif asset_type == "season" and season_number is not None:
+            return Path(meta["show_dir"]) / f"Season {season_number:02}" / f"Season{season_number:02}.jpg"
+    else:
+        assets_path = Path(config["assets"]["path"])
+        if asset_type == "poster":
+            if library_type == "movie":
+                return assets_path / library_type / movie_path / "poster.jpg"
+            elif library_type in ("show", "tv"):
+                return assets_path / library_type / show_path / "poster.jpg"
+        elif asset_type == "background":
+            if library_type == "movie":
+                return assets_path / library_type / movie_path / "fanart.jpg"
+            elif library_type in ("show", "tv"):
+                return assets_path / library_type / show_path / "fanart.jpg"
+        elif asset_type == "season" and season_number is not None:
+            return assets_path / library_type / show_path / f"Season{season_number:02}.jpg"
+    return None
+
+def asset_temp_path(config, library_name, extension="jpg"):
+    assets_path = Path(config["assets"]["path"])
     temp_dir = assets_path / library_name
     temp_dir.mkdir(parents=True, exist_ok=True)
     temp_filename = f"temp_{uuid.uuid4().hex}.{extension}"
     return temp_dir / temp_filename
 
-async def save_poster(image_content, save_path, item=None):
-    import asyncio
-    """
-    Save poster image content to disk, avoiding unnecessary overwrites.
-    """
+async def save_poster(image_content, save_path):
     try:
         new_checksum = hashlib.md5(image_content).hexdigest()
-
-        # If file exists, compare checksums to avoid unnecessary writes
         if save_path.exists():
             with open(save_path, "rb") as existing_file:
                 existing_checksum = hashlib.md5(existing_file.read()).hexdigest()
             if existing_checksum == new_checksum:
-                logging.info(f"[Assets] No changes detected for {safe_title_year(item)}. Skipping save.")
-                return
-            else:
-                logging.info(f"[Assets] Checksum difference detected for {safe_title_year(item)}. Proceeding to update.")
-        if config.get("dry_run", False):
-            logging.info(f"[Dry Run] Would save poster for {safe_title_year(item)}")
-            return
+                return "ALREADY_UP_TO_DATE", None
         save_path.parent.mkdir(parents=True, exist_ok=True)
-
-        # Use async file write for compatibility with async context
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, save_path.write_bytes, image_content)
-        logging.debug(f"[Assets] Poster saved successfully for {safe_title_year(item)}")
-
+        return True, None
     except Exception as e:
-        logging.warning(f"[Assets] Failed to save poster for {safe_title_year(item)}: {e}")
+        return False, str(e)

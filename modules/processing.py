@@ -1,204 +1,188 @@
-import logging
 import asyncio
 from pathlib import Path
-from helper.config import load_config
-from helper.cache import save_cache, save_failed_cache, load_cache, load_failed_cache
+from ruamel.yaml import YAML
+from helper.logging import log_processing_event, log_library_summary
+from helper.cache import save_cache, load_cache
+from helper.plex import get_plex_metadata
+from modules.builder import build_movie, build_tv
 
-config = load_config()
-
-async def process_item_metadata_and_assets_async(
-    plex_item, 
-    consolidated_metadata, 
-    dry_run=False, 
-    existing_yaml_data=None, 
-    library_name="Unknown",
-    existing_assets=None,
-    season_cache=None, 
-    episode_cache=None,
-    movie_cache=None,
-    session=None,
-    ignored_fields=None,
+async def process_item(
+    plex_item, consolidated_metadata, config, feature_flags=None, existing_yaml_data=None,  library_name="Unknown",
+    existing_assets=None, session=None, ignored_fields=None, 
 ):
-    from modules.builder import build_movie, build_tv
-    """
-    Process a single Plex item: build metadata and download/process poster assets.
-    """
     if ignored_fields is None:
         ignored_fields = set()
     if not plex_item:
-        logging.warning("[Plex] plex_item is None. Skipping item.")
+        log_processing_event("processing_no_item")
         return None
 
-    title = getattr(plex_item, "title", "Unknown")
-    year = getattr(plex_item, "year", "Unknown")
+    meta = await get_plex_metadata(plex_item)
+    title = meta.get("title", "Unknown")
+    year = meta.get("year", "Unknown")
     full_title = f"{title} ({year})"
-    
-    # Determine library name and type
+
     if library_name == "Unknown":
-        library_section = getattr(plex_item, "librarySection", None)
-        library_name = getattr(library_section, "title", "Unknown") if library_section else "Unknown"
-
-    library_section = getattr(plex_item, "librarySection", None)
-    library_type = getattr(library_section, "type", "Unknown").lower() if library_section else "unknown"
-    if library_type == "unknown":
-        library_type = getattr(plex_item, "type", "Unknown").lower()
-
-    if dry_run:
-        logging.info(f"[Dry Run] Would process metadata and assets for: {full_title} ({library_type})")
-        return None
-
-    logging.debug(f"[Processing] Started processing: {full_title} ({library_type})")
+        library_name = meta.get("library_name", "Unknown")
+    library_type = meta.get("library_type", "unknown")
 
     try:
         async with asyncio.Lock():
             if library_type == "movie":
                 stats = await build_movie(
-                    plex_item, consolidated_metadata, dry_run,
+                    config, consolidated_metadata,
                     existing_yaml_data=existing_yaml_data, session=session,
                     ignored_fields=ignored_fields, existing_assets=existing_assets,
-                    library_name=library_name, movie_cache=movie_cache
+                    library_name=library_name, meta=meta, feature_flags=feature_flags
                 )
-            elif library_type in ("tv", "show"):
+            elif library_type in ("show", "tv"):
                 stats = await build_tv(
-                    plex_item, consolidated_metadata, dry_run,
-                    existing_yaml_data=existing_yaml_data, season_cache=season_cache,
-                    episode_cache=episode_cache, session=session,
+                    config, consolidated_metadata,
+                    existing_yaml_data=existing_yaml_data, session=session,
                     ignored_fields=ignored_fields, existing_assets=existing_assets,
-                    library_name=library_name
+                    library_name=library_name, meta=meta, feature_flags=feature_flags   
                 )
             else:
-                logging.warning(f"[Processing] Unsupported library type '{library_type}' for {full_title}. Skipping...")
+                log_processing_event("processing_unsupported_type", full_title=full_title)
                 return None
     except Exception as e:
-        logging.error(f"[Processing] Failed to process metadata for {full_title}: {e}")
+        log_processing_event("processing_failed_item", full_title=full_title, error=str(e))
         return None
+    return stats
 
-    logging.debug(f"[Processing] Finished processing: {full_title} ({library_type})")
-    return stats 
-
-async def process_library_async(
-    plex, 
-    library_name, 
-    dry_run=False, 
-    library_item_counts=None, 
-    library_filesize=None, 
-    metadata_summaries=None, 
-    season_cache=None, 
-    episode_cache=None,
-    movie_cache=None,
-    session=None,
-    ignored_fields=None,
+plex_metadata_dict = {} 
+async def process_library(
+    library_section, config, feature_flags=None, library_item_counts=None, library_filesize=None, metadata_summaries=None, 
+    season_cache=None, episode_cache=None, movie_cache=None, session=None, ignored_fields=None
 ):
-    from ruamel.yaml import YAML
-    from helper.logging import human_readable_size
-
+    global plex_metadata_dict
+    plex_metadata_dict.clear()
+    library_name = library_section.title
     if ignored_fields is None:
-        ignored_fields = {"collections"}
-
-    output_path = Path(config["metadata_path"]) / f"{library_name.lower().replace(' ', '_')}.yml"
+        ignored_fields = {"collection", "guest"}
+    output_path = Path(config["metadata"]["directory"]) / f"{library_name.lower().replace(' ', '_')}.yml"
     existing_yaml_data = {}
-
-    # Load existing metadata if present
+    
     if output_path.exists():
         try:
             with open(output_path, "r", encoding="utf-8") as f:
                 yaml = YAML()
                 existing_yaml_data = yaml.load(f) or {}
         except Exception as e:
-            logging.error(f"[YAML Error] Failed to parse existing metadata file: {output_path} ({e})")
+            log_processing_event("processing_failed_parse_yaml", output_path=output_path, error=str(e))
 
     consolidated_metadata = existing_yaml_data if existing_yaml_data else {"metadata": {}}
     existing_assets = set()
 
+    poster_size = 0
+    background_size = 0
+    season_poster_size = 0
+    total_asset_size = 0
+    completed = 0
+    incomplete = 0
+    
     try:
-        library = plex.library.section(library_name)
-        items = await asyncio.to_thread(library.all)
+        library_name = library_section.title
+        items = await asyncio.to_thread(library_section.all)
         total_items = len(items)
-        logging.info(f"[Processing] Processing library: {library_name} with {total_items} items.")
+        log_processing_event("processing_library_items", library_name=library_name, total_items=total_items)
 
-        # Initialize aggregation structures
+        for item in items:
+            meta = await get_plex_metadata(
+                item, 
+                _season_cache=season_cache, 
+                _episode_cache=episode_cache, 
+                _movie_cache=movie_cache
+            )
+            media_type = meta.get("library_type", "").lower()
+            if media_type == "show":
+                media_type = "tv"
+            key = (meta.get("title"), meta.get("year"), media_type)
+            plex_metadata_dict[key] = meta
+
         if library_item_counts is not None:
             library_item_counts[library_name] = 0
         if library_filesize is not None:
             library_filesize[library_name] = 0
 
-        total_asset_size = 0
-        completed = 0
-        incomplete = 0
-
+        all_stats = []
         async def process_and_collect(item):
-            stats = await process_item_metadata_and_assets_async(
-                item, consolidated_metadata, dry_run, existing_yaml_data,
-                library_name, existing_assets, season_cache, episode_cache, movie_cache,
-                session=session, ignored_fields=ignored_fields
+            stats = await process_item(
+                plex_item=item, consolidated_metadata=consolidated_metadata, config=config,
+                feature_flags=feature_flags, existing_yaml_data=existing_yaml_data,
+                library_name=library_name, existing_assets=existing_assets,
+                session=session, ignored_fields=ignored_fields,
             )
-            # Aggregate asset sizes
             if stats and isinstance(stats, dict):
-                for key in ("poster", "season_poster", "background"):
-                    total = stats.get(key, {}).get("size", 0)
-                    nonlocal total_asset_size
-                    total_asset_size += total
-                # Completion tracking
-                percent = stats.get("percent", 0)
-                if percent >= 100:
-                    nonlocal completed
-                    completed += 1
-                else:
-                    nonlocal incomplete
-                    incomplete += 1
-            # Aggregate item count
+                all_stats.append(stats)
+                if feature_flags["poster"]:
+                    nonlocal poster_size
+                    poster_size += stats.get("poster", {}).get("size", 0)
+                if feature_flags["background"]:
+                    nonlocal background_size
+                    background_size += stats.get("background", {}).get("size", 0)
+                if feature_flags["season"]:
+                    nonlocal season_poster_size
+                    if "season_posters" in stats:
+                        season_poster_size += sum(stats["season_posters"].values())
+                    else:
+                        season_poster_size += stats.get("season_poster", {}).get("size", 0)
+                nonlocal total_asset_size
+                total_asset_size = (
+                    poster_size + background_size + season_poster_size
+                )
+                if feature_flags["metadata_basic"]:
+                    percent = stats.get("percent", 0)
+                    if percent >= 100:
+                        nonlocal completed
+                        completed += 1
+                    else:
+                        nonlocal incomplete
+                        incomplete += 1
             if library_item_counts is not None and library_name != "Unknown":
                 library_item_counts[library_name] = library_item_counts.get(library_name, 0) + 1
 
-        # Process each item asynchronously
         item_tasks = [process_and_collect(item) for item in items]
         await asyncio.gather(*item_tasks)
 
-        # Save total asset size for this library
         if library_filesize is not None:
             library_filesize[library_name] = total_asset_size
 
-        # Save metadata and caches
-        if not dry_run:
+        if not feature_flags["dry_run"]:
             try:
                 output_path.parent.mkdir(parents=True, exist_ok=True)
-                logging.debug(f"[Processing] Saving metadata to {output_path}...")
                 with open(output_path, "w", encoding="utf-8") as f:
                     yaml = YAML()
                     yaml.default_flow_style = False
                     yaml.allow_unicode = True
                     yaml.dump(consolidated_metadata, f)
-                logging.debug(f"[Processing] Metadata successfully saved to {output_path}")
-
-                # Save cache and failed cache using always-fresh loads
-                logging.debug("[Cache] Saving meta_cache and failed_cache...")
+                log_processing_event("processing_metadata_saved", output_path=output_path)
                 save_cache(load_cache())
-                save_failed_cache(load_failed_cache())
-                logging.debug("[Cache] Cache save completed.")
+                log_processing_event("processing_cache_saved")
 
             except Exception as e:
-                logging.error(f"[File Save Error] Failed to write metadata: {e}")
+                log_processing_event("processing_failed_write_metadata", error=str(e))
         else:
-            logging.info(f"[Dry Run] Metadata for {library_name} generated but not saved.")
+            log_processing_event("processing_metadata_dry_run", library_name=library_name)
 
-        # In-memory summary
+        run_metadata = feature_flags["metadata_basic"] or feature_flags["metadata_enhanced"]
         percent_complete = round((completed / total_items) * 100, 2) if total_items else 0.0
-        logging.info(
-            f"[Summary] Library '{library_name}': {completed}/{total_items} completed, {incomplete} incomplete ({percent_complete}%)"
+
+        log_library_summary(
+            library_name=library_name, completed=completed, incomplete=incomplete, total_items=total_items,
+            percent_complete=percent_complete, poster_size=poster_size, background_size=background_size,
+            season_poster_size=season_poster_size, library_filesize=library_filesize,
+            run_metadata=run_metadata
         )
-        if library_filesize is not None:
-            logging.info(
-                f"[Summary] Library '{library_name}' total assets downloaded: {human_readable_size(library_filesize[library_name])}"
-            )
+
         if metadata_summaries is not None:
             metadata_summaries[library_name] = {
                 "complete": completed,
                 "incomplete": incomplete,
                 "total_items": total_items,
-                "percent_complete": percent_complete,
+                "percent_complete": percent_complete if run_metadata else None,
             }
-
-
-        logging.info(f"[Summary] Finished processing {library_name}. Total Items: {total_items}")
+        
+        return all_stats
     except Exception as e:
-        logging.error(f"[Summary] Failed to process library {library_name}: {e}")
+        log_processing_event("processing_failed_library", library_name=library_name, error=str(e))
+        return None, set(), 0
