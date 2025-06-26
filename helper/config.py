@@ -3,9 +3,9 @@ from ruamel.yaml import YAML
 from pathlib import Path
 from helper.logging import log_config_event
 
-CONFIG_FILE = Path(
+CONFIG_DIR = Path(
     os.environ.get(
-        "CONFIG_FILE",
+        "CONFIG_DIR",
         "/config/config.yml" if os.path.exists("/config") else str(Path(__file__).parent.parent / "config.yml")
     )
 )
@@ -145,28 +145,28 @@ def env_variable_overrides(config, prefix=""):
                 log_config_event("env_override", env_key=env_key, env_val=env_val, old_val=old_val)
 
 def load_config_file():
-    if not CONFIG_FILE.exists():
+    if not CONFIG_DIR.exists():
         template_path = Path(__file__).parent.parent / "config_template.yml"
         if template_path.exists():
             import shutil
-            shutil.copy(template_path, CONFIG_FILE)
-            log_config_event("yaml_not_found", config_file=CONFIG_FILE)
+            shutil.copy(template_path, CONFIG_DIR)
+            log_config_event("yaml_not_found", config_file=CONFIG_DIR)
         else:
-            log_config_event("yaml_missing", config_file=CONFIG_FILE)
+            log_config_event("yaml_missing", config_file=CONFIG_DIR)
 
     config = DEFAULT_CONFIG.copy()
-    if CONFIG_FILE.exists():
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+    if CONFIG_DIR.exists():
+        with open(CONFIG_DIR, "r", encoding="utf-8") as f:
             try:
                 yaml = YAML()
                 user_config = yaml.load(f) or {}
                 warn_unknown_keys(user_config, DEFAULT_CONFIG)
                 merge_config_dicts(config, user_config)
-                log_config_event("config_loaded", config_file=CONFIG_FILE)
+                log_config_event("config_loaded", config_file=CONFIG_DIR)
             except yaml.YAMLError:
-                log_config_event("yaml_parse_error", config_file=CONFIG_FILE)
+                log_config_event("yaml_parse_error", config_file=CONFIG_DIR)
     else:
-        log_config_event("config_missing", config_file=CONFIG_FILE)
+        log_config_event("config_missing", config_file=CONFIG_DIR)
 
     env_variable_overrides(config)
     return config
