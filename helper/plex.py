@@ -306,8 +306,8 @@ def connect_plex_library(config, selected_libraries=None):
         log_plex_event("plex_libraries_retrieved_failed", error=e)
         sys.exit(1)
 
-    all_libraries = libraries.copy()
     libraries = [{"title": section.title, "type": section.TYPE} for section in sections]
+    all_libraries = libraries.copy()
     library_names = ", ".join(lib["title"] for lib in libraries)
     log_plex_event("plex_detected_libraries", libraries=library_names)
     if not sections:

@@ -7,7 +7,12 @@ MIN_RAM_GB = 4
 
 def get_setup_logging(config):
     script_name = Path(sys.argv[0]).stem
-    log_dir = Path(__file__).parent.parent / "logs"
+    log_dir = Path(
+        os.environ.get(
+            "LOG_DIR",
+            "/config/logs" if os.path.exists("/config") else str(Path(__file__).parent.parent / "logs")
+        )
+    )
     log_dir.mkdir(exist_ok=True)
     log_file = log_dir / f"{script_name}.log"
 
@@ -647,7 +652,10 @@ def log_final_summary(
     minutes, seconds = divmod(int(elapsed_time), 60)
     lines.extend(box_line(f"Processing completed in {minutes} mins {seconds} secs.", box_width))
     skipped_libraries = [lib["title"] for lib in libraries if lib["title"] not in selected_libraries]
-    lines.extend(box_line(f"Libraries processed: {len(library_item_counts)} | Skipped: {', '.join(skipped_libraries) if skipped_libraries else 'None'}", box_width))
+    lines.extend(box_line(
+        f"Libraries processed: {len(library_item_counts)} | Skipped: {', '.join(skipped_libraries) if skipped_libraries else 'None'}",
+        box_width
+    ))
     items_str = ", ".join(f"{lib} ({count})" for lib, count in library_item_counts.items())
     lines.extend(box_line(f"Items: {items_str}", box_width))
     meta_str = ", ".join(

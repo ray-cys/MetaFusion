@@ -3,10 +3,12 @@ from datetime import datetime
 from pathlib import Path
 from helper.logging import log_cache_event
 
-if os.environ.get("DOCKER_ENV", "0") == "1":
-    CACHE_PATH = Path.cwd() / "cache"
-else:
-    CACHE_PATH = Path(__file__).parent.parent / "cache"
+CACHE_PATH = Path(
+    os.environ.get(
+        "CACHE_PATH",
+        "/config/cache" if os.path.exists("/config") else str(Path(__file__).parent.parent / "cache")
+    )
+)
 CACHE_PATH.mkdir(exist_ok=True)
 CACHE_FILE = CACHE_PATH / "meta_cache.json"
 

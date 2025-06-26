@@ -4,8 +4,6 @@ psutil
 plexapi
 ruamel.yaml
 orjson
-pycountry
 Pillow
 aiohttp
 aiolimiter
-tqdm
