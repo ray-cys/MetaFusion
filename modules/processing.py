@@ -1,16 +1,14 @@
-import logging
 import asyncio
 from pathlib import Path
 from ruamel.yaml import YAML
-from helper.config import config_enabled 
 from helper.logging import log_processing_event, log_library_summary
 from helper.cache import save_cache, load_cache
 from helper.plex import get_plex_metadata
 from modules.builder import build_movie, build_tv
 
 async def process_item(
-    plex_item, consolidated_metadata, config, existing_yaml_data=None,  library_name="Unknown",
-    existing_assets=None, session=None, ignored_fields=None, feature_flags=None 
+    plex_item, consolidated_metadata, config, feature_flags=None, existing_yaml_data=None,  library_name="Unknown",
+    existing_assets=None, session=None, ignored_fields=None, 
 ):
     if ignored_fields is None:
         ignored_fields = set()
@@ -30,7 +28,7 @@ async def process_item(
     try:
         async with asyncio.Lock():
             if library_type == "movie":
-                stats, collection_asset_paths = await build_movie(
+                stats = await build_movie(
                     config, consolidated_metadata,
                     existing_yaml_data=existing_yaml_data, session=session,
                     ignored_fields=ignored_fields, existing_assets=existing_assets,
@@ -41,7 +39,7 @@ async def process_item(
                     config, consolidated_metadata,
                     existing_yaml_data=existing_yaml_data, session=session,
                     ignored_fields=ignored_fields, existing_assets=existing_assets,
-                    library_name=library_name, meta=meta, feature_flags=feature_flags
+                    library_name=library_name, meta=meta, feature_flags=feature_flags   
                 )
             else:
                 log_processing_event("processing_unsupported_type", full_title=full_title)
@@ -53,12 +51,11 @@ async def process_item(
 
 plex_metadata_dict = {} 
 async def process_library(
-    library_section, config, library_item_counts=None, library_filesize=None, metadata_summaries=None, 
-    season_cache=None, episode_cache=None, movie_cache=None, session=None, ignored_fields=None,
+    library_section, config, feature_flags=None, library_item_counts=None, library_filesize=None, metadata_summaries=None, 
+    season_cache=None, episode_cache=None, movie_cache=None, session=None, ignored_fields=None
 ):
     global plex_metadata_dict
     plex_metadata_dict.clear()
-    all_collection_asset_paths = set()
     library_name = library_section.title
     if ignored_fields is None:
         ignored_fields = {"collection", "guest"}
@@ -79,22 +76,9 @@ async def process_library(
     poster_size = 0
     background_size = 0
     season_poster_size = 0
-    collection_poster_size = 0
-    collection_background_size = 0
     total_asset_size = 0
     completed = 0
     incomplete = 0
-
-    feature_flags = {
-        "dry_run": config_enabled(config, "dry_run"),
-        "metadata_basic": config_enabled(config, "metadata_basic"),
-        "metadata_enhanced": config_enabled(config, "metadata_enhanced"),
-        "poster": config_enabled(config, "poster"),
-        "season": config_enabled(config, "season"),
-        "background": config_enabled(config, "background"),
-        "collection": config_enabled(config, "collection"),
-        "cleanup": config_enabled(config, "cleanup"),
-    }
     
     try:
         library_name = library_section.title
@@ -120,16 +104,16 @@ async def process_library(
         if library_filesize is not None:
             library_filesize[library_name] = 0
 
+        all_stats = []
         async def process_and_collect(item):
             stats = await process_item(
-                item, consolidated_metadata, config, existing_yaml_data,
-                library_name, existing_assets, session=session, ignored_fields=ignored_fields,
-                feature_flags=feature_flags 
+                plex_item=item, consolidated_metadata=consolidated_metadata, config=config,
+                feature_flags=feature_flags, existing_yaml_data=existing_yaml_data,
+                library_name=library_name, existing_assets=existing_assets,
+                session=session, ignored_fields=ignored_fields,
             )
-            if isinstance(stats, tuple):
-                stats, collection_asset_paths = stats
-                all_collection_asset_paths.update(collection_asset_paths)
             if stats and isinstance(stats, dict):
+                all_stats.append(stats)
                 if feature_flags["poster"]:
                     nonlocal poster_size
                     poster_size += stats.get("poster", {}).get("size", 0)
@@ -142,15 +126,9 @@ async def process_library(
                         season_poster_size += sum(stats["season_posters"].values())
                     else:
                         season_poster_size += stats.get("season_poster", {}).get("size", 0)
-                if feature_flags["collection"]:
-                    nonlocal collection_poster_size
-                    collection_poster_size += stats.get("collection_poster", {}).get("size", 0)
-                    nonlocal collection_background_size
-                    collection_background_size += stats.get("collection_background", {}).get("size", 0)
                 nonlocal total_asset_size
                 total_asset_size = (
-                    poster_size + background_size + season_poster_size +
-                    collection_poster_size + collection_background_size
+                    poster_size + background_size + season_poster_size
                 )
                 if feature_flags["metadata_basic"]:
                     percent = stats.get("percent", 0)
@@ -192,8 +170,7 @@ async def process_library(
         log_library_summary(
             library_name=library_name, completed=completed, incomplete=incomplete, total_items=total_items,
             percent_complete=percent_complete, poster_size=poster_size, background_size=background_size,
-            season_poster_size=season_poster_size, collection_poster_size=collection_poster_size,
-            collection_background_size=collection_background_size, library_filesize=library_filesize,
+            season_poster_size=season_poster_size, library_filesize=library_filesize,
             run_metadata=run_metadata
         )
 
@@ -205,6 +182,7 @@ async def process_library(
                 "percent_complete": percent_complete if run_metadata else None,
             }
         
-        return stats, all_collection_asset_paths, orphans_removed
+        return all_stats
     except Exception as e:
         log_processing_event("processing_failed_library", library_name=library_name, error=str(e))
+        return None, set(), 0

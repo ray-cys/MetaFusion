@@ -1,6 +1,4 @@
-import asyncio
-import hashlib
-import uuid
+import asyncio, hashlib, uuid
 from pathlib import Path
 from helper.config import load_config_file
 from helper.cache import load_cache
@@ -41,7 +39,7 @@ def get_meta_field(data, field, default=None, path=None):
     
 def get_best_poster(
     config, images, preferred_language="en", fallback=None, prefer_vote=None, max_width=None,
-    max_height=None, relaxed_vote=None, min_width=None, min_height=None, is_collection=False,
+    max_height=None, relaxed_vote=None, min_width=None, min_height=None,
 ):
     if not images:
         return None
@@ -107,7 +105,7 @@ def get_best_poster(
 
 def get_best_background(
     config, images, prefer_vote=None, max_width=None, max_height=None, relaxed_vote=None,
-    min_width=None, min_height=None, is_collection=False,
+    min_width=None, min_height=None
 ):
     if not images:
         return None
@@ -159,23 +157,12 @@ def smart_asset_upgrade(
     new_width = new_image_data.get("width", 0)
     new_height = new_image_data.get("height", 0)
     new_votes = new_image_data.get("vote_average", 0)
-    if library_type == "Collection":
-        if asset_type == "collection":
-            vote_threshold = config["poster_set"].get("vote_threshold", 5.0)
-            cache_key_name = "collection_average"
-        elif asset_type == "collection_background":
-            vote_threshold = config["background_set"].get("vote_threshold", 5.0)
-            cache_key_name = "collection_bg_average"
-        else:
-            vote_threshold = config["poster_set"].get("vote_threshold", 5.0)
-            cache_key_name = "collection_average"
+    if asset_type == "background":
+        vote_threshold = config["background_set"].get("vote_threshold", 5.0)
+        cache_key_name = "bg_average"
     else:
-        if asset_type == "background":
-            vote_threshold = config["background_set"].get("vote_threshold", 5.0)
-            cache_key_name = "bg_average"
-        else:
-            vote_threshold = config["poster_set"].get("vote_threshold", 5.0)
-            cache_key_name = "poster_average"
+        vote_threshold = config["poster_set"].get("vote_threshold", 5.0)
+        cache_key_name = "poster_average"
     cached_votes = 0
     if cache_key:
         cache = load_cache()
@@ -235,23 +222,12 @@ async def download_poster(config, image_path, save_path, session=None, retries=3
     status = getattr(last_exception, "status", None)
     return False, url, status, str(last_exception) if last_exception else None
 
-def get_asset_path(config, meta, asset_type="poster", season_number=None, collection_name=None):
+def get_asset_path(config, meta, asset_type="poster", season_number=None):
     mode = config["assets"].get("mode", "kometa")
     library_type = meta.get("library_type")
     show_path = meta.get("show_path")
     movie_path = meta.get("movie_path")
     assets_path = Path(config["assets"]["path"])
-
-    if asset_type in ("collection", "collection_background"):
-        if mode != "kometa":
-            return None
-        if not collection_name:
-            raise ValueError("Collection name must be provided for asset in Kometa mode.")
-        base = assets_path / library_type / collection_name
-        if asset_type == "collection":
-            return base / "poster.jpg"
-        elif asset_type == "collection_background":
-            return base / "fanart.jpg"
 
     if mode == "plex":
         if asset_type == "poster":

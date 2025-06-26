@@ -1,10 +1,7 @@
-import os
-import logging
-import orjson
-import asyncio
+import os, asyncio, orjson
 from datetime import datetime
 from pathlib import Path
-from helper.logging import log_helper_event
+from helper.logging import log_cache_event
 
 if os.environ.get("DOCKER_ENV", "0") == "1":
     CACHE_PATH = Path.cwd() / "cache"
@@ -17,15 +14,15 @@ def load_cache():
     if CACHE_FILE.exists() and CACHE_FILE.stat().st_size > 0:
         with open(CACHE_FILE, "rb") as f:
             cache = orjson.loads(f.read())
-            log_helper_event("cache_loaded", count=len(cache), cache_file=CACHE_FILE)
+            log_cache_event("cache_loaded", count=len(cache), cache_file=CACHE_FILE)
             return cache
-    log_helper_event("cache_empty", cache_file=CACHE_FILE)
+    log_cache_event("cache_empty", cache_file=CACHE_FILE)
     return {}
 
 def save_cache(cache):
     with open(CACHE_FILE, "wb") as f:
         f.write(orjson.dumps(cache, option=orjson.OPT_INDENT_2))
-    log_helper_event("cache_saved", count=len(cache), cache_file=CACHE_FILE)
+    log_cache_event("cache_saved", count=len(cache), cache_file=CACHE_FILE)
 
 cache_lock = asyncio.Lock()
 async def meta_cache_async(cache_key, tmdb_id, title, year, media_type, **kwargs):
@@ -39,5 +36,5 @@ async def meta_cache_async(cache_key, tmdb_id, title, year, media_type, **kwargs
     for k, v in kwargs.items():
         entry[k] = v
     cache[cache_key] = entry
-    log_helper_event("cache_updated", cache_key=cache_key, media_type=media_type, title=title, year=year)
+    log_cache_event("cache_updated", cache_key=cache_key, media_type=media_type, title=title, year=year)
     save_cache(cache)

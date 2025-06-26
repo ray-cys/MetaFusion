@@ -1,10 +1,4 @@
-import logging
-import sys
-import os
-import platform
-import textwrap
-import requests
-import psutil
+import os, sys, platform, psutil, logging, textwrap, requests
 from pathlib import Path
 
 MIN_PYTHON = (3, 8)
@@ -50,7 +44,8 @@ def get_setup_logging(config):
     logger.addHandler(console_handler)
     return logger
 
-def get_meta_banner(logger=None, width=60):
+def get_meta_banner(logger=None):
+    width=80
     border = "=" * width
     title = " ".join("METAFUSION").center(width - 6)
     centered = f"|| {title} ||"
@@ -66,31 +61,53 @@ def get_meta_banner(logger=None, width=60):
         for line in lines:
             print(line)
 
-def log_hardware_info(logger):
-    os_info = f"{platform.system()} {platform.release()}"
-    py_version = platform.python_version()
-    cpu_cores = os.cpu_count()
-    ram_gb = psutil.virtual_memory().total / (1024 ** 3)
-    logger.info(f"[System] Operating System: {os_info}")
-    logger.info(f"[System] Python version: {py_version}")
-    logger.info(f"[System] CPU cores: {cpu_cores}")
-    logger.info(f"[System] RAM: {ram_gb:.2f} GB")
-
 def check_sys_requirements(logger, config):
+    os_info = f"{platform.system()} {platform.release()}"
     py_version = sys.version_info
     cpu_cores = os.cpu_count()
-    ram_gb = psutil.virtual_memory().total / (1024 ** 3)
+    mem = psutil.virtual_memory()
+    total_gb = mem.total / (1024 ** 3)
+    used_gb = mem.used / (1024 ** 3)
+    free_gb = mem.available / (1024 ** 3)
+    cpu_percent = psutil.cpu_percent(interval=1)
 
+    box_width = 80
+    lines = []
+    header = "=" * box_width
+    title = "SYSTEM CONFIGURATION"
+    lines.append(header)
+    lines.append(f"|| {title.center(box_width - 4)} ||")
+    lines.append(header)
+
+    def box_line(text, width=box_width):
+        import textwrap
+        wrapped = textwrap.wrap(text, width=width - 4)
+        return [f"|| {line.ljust(width - 4)} ||" for line in wrapped]
+
+    lines.extend(box_line(f"[System] Operating System detected: {os_info}", box_width))
     if py_version < MIN_PYTHON:
-        logger.error(f"[System] Python {MIN_PYTHON[0]}.{MIN_PYTHON[1]}+ required. Detected: {platform.python_version()}. Exiting.")
+        lines.extend(box_line(f"[System] Python {MIN_PYTHON[0]}.{MIN_PYTHON[1]}+ required. Detected: {platform.python_version()}. Exiting.", box_width))
+        for line in lines:
+            logger.error(line)
         sys.exit(1)
+    else:
+        lines.extend(box_line(f"[System] Python version detected: {platform.python_version()}", box_width))
+
     if cpu_cores is not None and cpu_cores < MIN_CPU_CORES:
-        logger.error(f"[System] At least {MIN_CPU_CORES} CPU cores required. Detected: {cpu_cores}. Exiting.")
+        lines.extend(box_line(f"[System] At least {MIN_CPU_CORES} CPU cores required. Detected: {cpu_cores}. Exiting.", box_width))
+        for line in lines:
+            logger.error(line)
         sys.exit(1)
-    if ram_gb < MIN_RAM_GB:
-        logger.error(f"[System] At least {MIN_RAM_GB} GB RAM required. Detected: {ram_gb:.2f} GB. Exiting.")
+    else:
+        lines.extend(box_line(f"[System] CPU Cores detected: {cpu_cores} (Usage: {cpu_percent}%)", box_width))
+
+    if total_gb < MIN_RAM_GB:
+        lines.extend(box_line(f"[System] {MIN_RAM_GB} GB RAM required. Detected: {total_gb:.2f} GB. Exiting.", box_width))
+        for line in lines:
+            logger.error(line)
         sys.exit(1)
-    log_hardware_info(logger)
+    else:
+        lines.extend(box_line(f"[System] RAM Memory detected: {total_gb:.2f} GB (Used: {used_gb:.2f} GB, Free: {free_gb:.2f} GB)", box_width))
 
     plex_url = config.get('plex', {}).get('url')
     plex_token = config.get('plex', {}).get('token')
@@ -100,10 +117,14 @@ def check_sys_requirements(logger, config):
             url = f"{plex_url}/?X-Plex-Token={plex_token}"
             resp = requests.get(url, timeout=2)
             internal_up = resp.status_code in (200, 401)
+            if internal_up:
+                lines.extend(box_line("[Network] Plex Media Server connection: UP", box_width))
+            else:
+                lines.extend(box_line("[Network] Plex Media Server connection: DOWN", box_width))
         except Exception as e:
-            logger.error(f"[Network] Internal network (Plex server) check failed: {e}")
+            lines.extend(box_line(f"[Network] Plex Media Server connection check failed: {e}", box_width))
     else:
-        logger.error("[Network] Plex server URL or token not set in config.")
+        lines.extend(box_line("[Network] Plex Media Server URL or token not set. Check configuration...", box_width))
 
     tmdb_api_key = config.get('tmdb', {}).get('api_key')
     tmdb_up = False
@@ -112,119 +133,39 @@ def check_sys_requirements(logger, config):
         try:
             resp = requests.get(tmdb_url, timeout=3)
             tmdb_up = resp.status_code == 200
+            if tmdb_up:
+                lines.extend(box_line("[Network] TMDb API connection: UP", box_width))
+            else:
+                lines.extend(box_line("[Network] TMDb API connection: DOWN", box_width))
         except Exception as e:
-            logger.error(f"[Network] TMDb API check failed: {e}")
+            lines.extend(box_line(f"[Network] TMDb API connection check failed: {e}", box_width))
     else:
-        logger.error("[Network] TMDb API key not set in config.")
+        lines.extend(box_line("[Network] TMDb API key not set in config.", box_width))
 
-    if internal_up and tmdb_up:
-        logger.info("[Network] Plex server and TMDb API are UP.")
-    else:
-        if not internal_up:
-            logger.error("[Network] Plex server is DOWN. Exiting.")
-        if not tmdb_up:
-            logger.error("[Network] TMDb API is DOWN. Exiting.")
+    lines.append(header)
+    for line in lines:
+        logger.info(line)
+
+    if not internal_up or not tmdb_up:
+        for line in lines:
+            logger.error(line)
         sys.exit(1)
 
-def log_helper_event(event, **kwargs):
+def log_main_event(event, logger=None, **kwargs):
     logger = kwargs.get("logger") or logging.getLogger()
     messages = {
-        # Main events
-        "metafusion_processing_disabled": "[MetaFusion] Processing is set to False. Exiting without changes.",
-        "metafusion_started": "[MetaFusion] Started at {start_time}",
-        "metafusion_processing_metadata": "[MetaFusion] Processing libraries metadata and assets...",
-        "metafusion_no_libraries": "[MetaFusion] No libraries scheduled for processing.",
-        "metafusion_unhandled_exception": "[MetaFusion] Unhandled exception: {error}",
-        # Config events
-        "feature_disabled": "[Config] {feature} is DISABLED and will not run.",
-        "feature_enabled": "[Config] {feature} is ENABLED and will run.",
-        "unknown_key": "[Config] Unknown config key in config.yml: {key}",
-        "yaml_not_found": "[Config] YAML not found at {config_file}. Copying template to {config_file}. Review and edit configuration.",
-        "yaml_missing": "[Config] YAMLs not found at {config_file}. Using default configuration.",
-        "yaml_parse_error": "[Config] Failed to parse YAML at {config_file}. Using default configuration.",
-        "config_missing": "[Config] Config file {config_file} does not exist. Using default configuration.",
-        "env_override": "[Config] Environment override: {env_key}={env_val} (was {old_val})",
-        "config_loaded": "[Config] Successfully loaded configuration from {config_file}.",
-        # Cache events
-        "cache_loaded": "[Cache] Loaded {count} entries from {cache_file}",
-        "cache_empty": "[Cache] No cache file found at {cache_file}, starting with empty cache.",
-        "cache_saved": "[Cache] Saved {count} entries to {cache_file}",
-        "cache_updated": "[Cache] Updated cache for key '{cache_key}' ({media_type}): {title} ({year})",
-        # Plex events
-        "plex_connected": "[Plex] Successfully connected to Plex Server.",
-        "plex_connect_failed": "[Plex] Failed to connect to Plex Server: {error}",
-        "plex_libraries_retrieved_failed": "[Plex] Failed to retrieve libraries: {error}",
-        "plex_detected_libraries": "[Plex] Detected libraries [ {libraries} ]",
-        "plex_skipping_library": "[Plex] Skipping library [ {library} ]",
-        "plex_no_libraries_found": "[Plex] No libraries found. Exiting.",
-        "plex_failed_extract_item_id": "[Plex] Failed to extract item ID for {title} ({year}): {error}",
-        "plex_failed_extract_library_type": "[Plex] Failed to extract library type for {library_name}: {error}",
-        "plex_failed_extract_ids": "[Plex] Failed to extract TMDb, IMDb, TVDb IDs for {title} ({year}): {error}",
-        "plex_missing_ids": "[Plex] Missing IDs for {title} ({year}): {missing_ids}. Extracted: {found_ids}",
-        "plex_failed_extract_movie_dir": "[Plex] Failed to extract movie directory for {title} ({year}): {error}",
-        "plex_failed_extract_show_dir": "[Plex] Failed to extract show directory for {title} ({year}): {error}",
-        "plex_failed_extract_seasons_episodes": "[Plex] Failed to extract seasons/episodes for {title} ({year}): {error}",
-        "plex_critical_metadata_missing": "[Plex] Critical metadata missing for item [ratingKey={item_key}]: {missing_critical}. Extracted: {result}",
-        # TMDb events
-        "tmdb_no_api_key": "[TMDb] No API key found in config: {tmdb_config}",
-        "tmdb_cache_hit": "[TMDb] Returning cached response for {url} params: {params}",
-        "tmdb_request": "[TMDb] Making request to {url} with params: {query} (Attempt {attempt}/{retries})",
-        "tmdb_success": "[TMDb] Successful response for {url} (Attempt {attempt})",
-        "tmdb_rate_limited": "[TMDb] Rate limited (HTTP 429). Sleeping {retry_after}s before retry... Params: {query}",
-        "tmdb_non_200": "[TMDb] Non-200 response {status} for {url} params: {query} body: {body}",
-        "tmdb_request_failed": "[TMDb] Attempt {attempt}: Request failed for URL {url} with params {query}: {error}",
-        "tmdb_retrying": "[TMDb] Retrying in {sleep_time}s... (Attempt {next_attempt}/{retries})",
-        "tmdb_failed": "[TMDb] Failed after {retries} attempts for {url} with params {query}",
+        "main_started": "[MetaFusion] Processing started at {start_time}",
+        "main_processing_disabled": "[MetaFusion] Processing is set to False. Exiting without changes.",
+        "main_no_libraries": "[MetaFusion] No libraries scheduled for processing.",
+        "main_unhandled_exception": "[MetaFusion] Unhandled exception: {error}",
     }
     levels = {
-        # Main events
-        "metafusion_processing_disabled": "info",
-        "metafusion_started": "info",
-        "metafusion_processing_metadata": "info",
-        "metafusion_no_libraries": "info",
-        "metafusion_unhandled_exception": "error",
-        # Config events
-        "feature_disabled": "info",
-        "feature_enabled": "info",
-        "unknown_key": "warning",
-        "yaml_not_found": "warning",
-        "yaml_missing": "error",
-        "yaml_parse_error": "error",
-        "config_missing": "warning",
-        "env_override": "debug",
-        "config_loaded": "debug",
-        # Cache events
-        "cache_loaded": "debug",
-        "cache_empty": "debug",
-        "cache_saved": "debug",
-        "cache_updated": "debug",        
-        # Plex events
-        "plex_connected": "debug",
-        "plex_connect_failed": "error",
-        "plex_libraries_retrieved_failed": "error",
-        "plex_detected_libraries": "info",
-        "plex_skipping_library": "info",
-        "plex_no_libraries_found": "warning",
-        "plex_failed_extract_item_id": "warning",
-        "plex_failed_extract_library_type": "warning",
-        "plex_failed_extract_ids": "warning",
-        "plex_missing_ids": "debug",
-        "plex_failed_extract_movie_dir": "warning",
-        "plex_failed_extract_show_dir": "warning",
-        "plex_failed_extract_seasons_episodes": "warning",
-        "plex_critical_metadata_missing": "warning",
-        # TMDb events
-        "tmdb_no_api_key": "error",
-        "tmdb_cache_hit": "debug",
-        "tmdb_request": "debug",
-        "tmdb_success": "debug",
-        "tmdb_rate_limited": "warning",
-        "tmdb_non_200": "warning",
-        "tmdb_request_failed": "warning",
-        "tmdb_retrying": "info",
-        "tmdb_failed": "error",
+        "main_started": "info",
+        "main_processing_disabled": "info",
+        "main_no_libraries": "info",
+        "main_unhandled_exception": "error",
     }
-    msg = messages.get(event, "[Logging] Unknown event")
+    msg = messages.get(event, "[MetaFusion] Unknown event")
     try:
         msg = msg.format(**kwargs)
     except Exception:
@@ -239,13 +180,173 @@ def log_helper_event(event, **kwargs):
     else:
         logger.debug(msg)
 
-def log_processing_event(event, **kwargs):
+def log_config_event(event, logger=None, **kwargs):
+    logger = kwargs.get("logger") or logging.getLogger()
+    messages = {
+        "feature_disabled": "[Config] {feature} is DISABLED and will not run.",
+        "feature_enabled": "[Config] {feature} is ENABLED and will run.",
+        "unknown_feature": "[Config] Unknown configuration settings: {feature}",
+        "unknown_key": "[Config] Unknown config key in config.yml: {key}",
+        "yaml_not_found": "[Config] YAML not found at {config_file}. Copying template to {config_file}. Review and edit configuration.",
+        "yaml_missing": "[Config] YAMLs not found at {config_file}. Using default configuration.",
+        "yaml_parse_error": "[Config] Failed to parse YAML at {config_file}. Using default configuration.",
+        "config_missing": "[Config] Config file {config_file} does not exist. Using default configuration.",
+        "env_override_invalid": "[Config] Invalid environment override for {env_key}: '{env_val}' (expected {expected_type}). Keeping previous value: {old_val}",
+        "env_override": "[Config] Environment override: {env_key}={env_val} (was {old_val})",
+        "config_loaded": "[Config] Successfully loaded configuration from {config_file}.",
+    }
+    levels = {
+        "feature_disabled": "info",
+        "feature_enabled": "info",
+        "unknown_feature": "warning",
+        "unknown_key": "warning",
+        "yaml_not_found": "warning",
+        "yaml_missing": "error",
+        "yaml_parse_error": "error",
+        "config_missing": "warning",
+        "env_override_invalid": "error",
+        "env_override": "debug",
+        "config_loaded": "debug",
+    }
+    msg = messages.get(event, "[Config] Unknown event")
+    try:
+        msg = msg.format(**kwargs)
+    except Exception:
+        pass
+    level = levels.get(event, "info")
+    if level == "info":
+        logger.info(msg)
+    elif level == "warning":
+        logger.warning(msg)
+    elif level == "error":
+        logger.error(msg)
+    else:
+        logger.debug(msg)
+
+def log_cache_event(event, logger=None, **kwargs):
+    logger = kwargs.get("logger") or logging.getLogger()
+    messages = {
+        "cache_loaded": "[Cache] Loaded {count} entries from {cache_file}",
+        "cache_empty": "[Cache] No cache file found at {cache_file}, starting with empty cache.",
+        "cache_saved": "[Cache] Saved {count} entries to {cache_file}",
+        "cache_updated": "[Cache] Updated cache for key '{cache_key}' ({media_type}): {title} ({year})",
+    }
+    levels = {
+        "cache_loaded": "debug",
+        "cache_empty": "debug",
+        "cache_saved": "debug",
+        "cache_updated": "debug",        
+    }
+    msg = messages.get(event, "[Cache] Unknown event")
+    try:
+        msg = msg.format(**kwargs)
+    except Exception:
+        pass
+    level = levels.get(event, "info")
+    if level == "info":
+        logger.info(msg)
+    elif level == "warning":
+        logger.warning(msg)
+    elif level == "error":
+        logger.error(msg)
+    else:
+        logger.debug(msg)
+
+def log_plex_event(event, logger=None, **kwargs):
+    logger = kwargs.get("logger") or logging.getLogger()
+    messages = {
+        "plex_connected": "[Plex] Successfully connected to Plex Media Server version: {version}.",
+        "plex_connect_failed": "[Plex] Failed to connect to Plex Media Server: {error}",
+        "plex_libraries_retrieved_failed": "[Plex] Failed to retrieve libraries: {error}",
+        "plex_detected_libraries": "[Plex] Detected libraries [ {libraries} ]",
+        "plex_skipping_library": "[Plex] Skipping library [ {library} ]",
+        "plex_no_libraries_found": "[Plex] No libraries found. Exiting.",
+        "plex_failed_extract_item_id": "[Plex] Failed to extract item ID for {title} ({year}): {error}",
+        "plex_failed_extract_library_type": "[Plex] Failed to extract library type for {library_name}: {error}",
+        "plex_failed_extract_ids": "[Plex] Failed to extract TMDb, IMDb, TVDb IDs for {title} ({year}): {error}",
+        "plex_missing_ids": "[Plex] Missing IDs for {title} ({year}): {missing_ids}. Extracted: {found_ids}",
+        "plex_failed_extract_movie_path": "[Plex] Failed to extract movie directory for {title} ({year}): {error}",
+        "plex_failed_extract_show_path": "[Plex] Failed to extract show directory for {title} ({year}): {error}",
+        "plex_failed_extract_seasons_episodes": "[Plex] Failed to extract seasons/episodes for {title} ({year}): {error}",
+        "plex_critical_metadata_missing": "[Plex] Critical metadata missing for item [ratingKey={item_key}]: {missing_critical}. Extracted: {result}",
+    }
+    levels = {
+        "plex_connected": "info",
+        "plex_connect_failed": "error",
+        "plex_libraries_retrieved_failed": "error",
+        "plex_detected_libraries": "info",
+        "plex_skipping_library": "info",
+        "plex_no_libraries_found": "warning",
+        "plex_failed_extract_item_id": "warning",
+        "plex_failed_extract_library_type": "warning",
+        "plex_failed_extract_ids": "warning",
+        "plex_missing_ids": "debug",
+        "plex_failed_extract_movie_path": "warning",
+        "plex_failed_extract_show_path": "warning",
+        "plex_failed_extract_seasons_episodes": "warning",
+        "plex_critical_metadata_missing": "warning",
+    }
+    msg = messages.get(event, "[Plex] Unknown event")
+    try:
+        msg = msg.format(**kwargs)
+    except Exception:
+        pass
+    level = levels.get(event, "info")
+    if level == "info":
+        logger.info(msg)
+    elif level == "warning":
+        logger.warning(msg)
+    elif level == "error":
+        logger.error(msg)
+    else:
+        logger.debug(msg)
+
+def log_tmdb_event(event, logger=None, **kwargs):
+    logger = kwargs.get("logger") or logging.getLogger()
+    messages = {
+        "tmdb_no_api_key": "[TMDb] No API key found in config: {tmdb_config}",
+        "tmdb_cache_hit": "[TMDb] Returning cached response for {url} params: {params}",
+        "tmdb_request": "[TMDb] Making request to {url} with params: {query} (Attempt {attempt}/{retries})",
+        "tmdb_success": "[TMDb] Successful response for {url} (Attempt {attempt})",
+        "tmdb_rate_limited": "[TMDb] Rate limited (HTTP 429). Sleeping {retry_after}s before retry... Params: {query}",
+        "tmdb_non_200": "[TMDb] Non-200 response {status} for {url} params: {query} body: {body}",
+        "tmdb_request_failed": "[TMDb] Attempt {attempt}: Request failed for URL {url} with params {query}: {error}",
+        "tmdb_retrying": "[TMDb] Retrying in {sleep_time}s... (Attempt {next_attempt}/{retries})",
+        "tmdb_failed": "[TMDb] Failed after {retries} attempts for {url} with params {query}",
+    }
+    levels = {
+        "tmdb_no_api_key": "error",
+        "tmdb_cache_hit": "debug",
+        "tmdb_request": "debug",
+        "tmdb_success": "debug",
+        "tmdb_rate_limited": "warning",
+        "tmdb_non_200": "warning",
+        "tmdb_request_failed": "warning",
+        "tmdb_retrying": "info",
+        "tmdb_failed": "error",
+    }
+    msg = messages.get(event, "[TMDb] Unknown event")
+    try:
+        msg = msg.format(**kwargs)
+    except Exception:
+        pass
+    level = levels.get(event, "info")
+    if level == "info":
+        logger.info(msg)
+    elif level == "warning":
+        logger.warning(msg)
+    elif level == "error":
+        logger.error(msg)
+    else:
+        logger.debug(msg)
+        
+def log_processing_event(event, logger=None, **kwargs):
     logger = kwargs.get("logger") or logging.getLogger()
     messages = {
         "processing_no_item": "[Processing] No item found. Skipping...",
         "processing_unsupported_type": "[Processing] Unsupported library type for {full_title}. Skipping...",
         "processing_failed_item": "[Processing] Failed to process {full_title}: {error}",
-        "processing_library_items": "[Processing] {library_name} with {total_items} items.",
+        "processing_library_items": "[Processing] {library_name} library with {total_items} items detected.",
         "processing_failed_parse_yaml": "[Processing] Failed to parse YAML file: {output_path} ({error})",
         "processing_metadata_saved": "[Processing] Metadata successfully saved to {output_path}",
         "processing_cache_saved": "[Processing] Cache files saved.",
@@ -280,10 +381,9 @@ def log_processing_event(event, **kwargs):
     else:
         logger.debug(msg)
 
-def log_builder_event(event, **kwargs):
+def log_builder_event(event, logger=None, **kwargs):
     logger = kwargs.get("logger") or logging.getLogger()
     messages = {
-        # General and metadata events
         "builder_no_tmdb_id": "[{media_type}] No TMDb or {id_type} ID found for {full_title}. Skipping...",
         "builder_invalid_tmdb_id": "[{media_type}] Invalid TMDb ID format for {full_title}. Skipping...",
         "builder_no_tmdb_season_data": "[{media_type}] No TMDb data found for Season {season_number} of {full_title}. Skipping...",
@@ -292,31 +392,26 @@ def log_builder_event(event, **kwargs):
         "builder_metadata_upgraded": "[{media_type}] Metadata upgraded and cache updated for {full_title} ({percent}%) using TMDb ID {tmdb_id}. Fields changed: {changes}",
         "builder_dry_run_metadata": "[Dry Run] Would build metadata for {media_type}: {full_title}",
         "builder_dry_run_asset": "[Dry Run] Would build {asset_type} asset for {media_type}: {full_title}",
-        # Poster/Background/Collection events
         "builder_no_asset_path": "[{media_type}] Asset path could not be determined for {full_title}{extra}. Skipping {asset_type} download...",
         "builder_no_suitable_asset": "[{media_type}] No suitable {asset_type} found for {full_title}{extra}.",
-        "builder_downloading_asset": "[{media_type}] Downloading {asset_type} for {full_title} from TMDb path: {file_path}. Filesize: {filesize}",
+        "builder_downloading_asset": "[{media_type}] Downloading {asset_type} for {full_title} from TMDb. Filesize: {filesize}",
         "builder_asset_download_failed": "[{media_type}] New {asset_type} download failed for {full_title} from {url} (status: {status}) Error: {error}",
-        "builder_asset_upgraded": "[{media_type}] Asset {asset_type} upgrade for {full_title}: {reason} Filesize: {filesize}",
+        "builder_asset_upgraded": "[{media_type}] Upgraded for {asset_type} {full_title}: {reason} Filesize: {filesize}",
         "builder_no_upgrade_needed": "[{media_type}] No {asset_type} upgrade needed for {full_title}. Existing {filesize} image meets criteria.",
         "builder_no_image_for_compare": "[{media_type}] No image provided for comparison for {full_title}{extra}. Skipping detailed check...",
         "builder_error_image_compare": "[{media_type}] Failed to read temp image for comparison for {full_title}{extra}: {error}",
-        # Collection events
-        "builder_no_tmdb_collection_data": "[{media_type}] No TMDb data found for collection {collection_name}. Skipping collection assets...",
-        # Season events
         "builder_dry_run_asset_season": "[Dry Run] Would build {asset_type} asset for {media_type} Season {season_number}: {full_title}",
         "builder_no_asset_path_season": "[{media_type}] No asset path found for {full_title} Season {season_number}. Skipping season poster asset...",
         "builder_no_season_details": "[{media_type}] No season details for {full_title} Season {season_number}. Skipping season poster asset...",
         "builder_no_suitable_asset_season": "[{media_type}] No suitable {asset_type} found for {full_title} Season {season_number}. Skipping...",
-        "builder_downloading_asset_season": "[{media_type}] Downloading {asset_type} for {full_title} Season {season_number} from TMDb path: {file_path}. Filesize: {filesize}",
+        "builder_downloading_asset_season": "[{media_type}] Downloading {asset_type} for {full_title} Season {season_number} from TMDb. Filesize: {filesize}",
         "builder_asset_download_failed_season": "[{media_type}] {asset_type} download failed for {full_title} Season {season_number} from {url} (status: {status}) Error: {error}",
-        "builder_asset_upgraded_season": "[{media_type}] Season {season_number} {asset_type} upgraded for {full_title}: {reason} Filesize: {filesize}",
-        "builder_no_upgrade_needed_season": "[{media_type}] Season {season_number}: No {asset_type} upgrade needed. Existing {filesize} image meets criteria.",
-        "builder_no_image_for_compare_season": "[{media_type}] Season {season_number}: No image provided for comparison. Skipping detailed check...",
-        "builder_error_image_compare_season": "[{media_type}] Season {season_number}: Failed to read temp image for comparison: {error}",
+        "builder_asset_upgraded_season": "[{media_type}] Upgraded for {asset_type} {full_title} Season {season_number}: {reason} Filesize: {filesize}",
+        "builder_no_upgrade_needed_season": "[{media_type}] No {asset_type} upgrade needed for {full_title} Season {season_number}. Existing {filesize} image meets criteria.",
+        "builder_no_image_for_compare_season": "[{media_type}] No image provided for comparison for {full_title} Season {season_number}. Skipping detailed check...",
+        "builder_error_image_compare_season": "[{media_type}] Failed to read temp image for comparison for {full_title} Season {season_number}: {error}",
     }
     levels = {
-        # General and metadata events
         "builder_no_tmdb_id": "warning",
         "builder_invalid_tmdb_id": "warning",
         "builder_no_tmdb_season_data": "warning",
@@ -325,7 +420,6 @@ def log_builder_event(event, **kwargs):
         "builder_metadata_upgraded": "info",
         "builder_dry_run_metadata": "info",
         "builder_dry_run_asset": "info",
-        # Poster/Background/Collection events
         "builder_no_asset_path": "error",
         "builder_no_suitable_asset": "info",
         "builder_downloading_asset": "debug",
@@ -334,9 +428,6 @@ def log_builder_event(event, **kwargs):
         "builder_no_upgrade_needed": "info",
         "builder_no_image_for_compare": "warning",
         "builder_error_image_compare": "error",
-        # Collection events
-        "builder_no_tmdb_collection_data": "warning",
-        # Season events
         "builder_dry_run_asset_season": "info",
         "builder_no_asset_path_season": "warning",
         "builder_no_season_details": "info",
@@ -355,9 +446,9 @@ def log_builder_event(event, **kwargs):
         context = kwargs.get("context", {})
         asset_type = kwargs.get("asset_type", "")
         if status_code == "UPGRADE_VOTES":
-            reason = f"Higher vote found: {context.get('new_votes')} (Cached: {context.get('cached_votes')}, Threshold: {context.get('vote_threshold')})"
+            reason = f"Vote average found: {context.get('new_votes')} (Cached: {context.get('cached_votes')}, Threshold: {context.get('vote_threshold')})"
         elif status_code == "UPGRADE_THRESHOLD":
-            reason = f"Meeting vote threshold: {context.get('new_votes')} (Threshold: {context.get('vote_threshold')})"
+            reason = f"Vote average threshold: {context.get('new_votes')} (Threshold: {context.get('vote_threshold')})"
         elif status_code == "UPGRADE_DIMENSIONS":
             reason = f"New dimensions: {context.get('new_width')}x{context.get('new_height')}, Existing: {context.get('existing_width', '?')}x{context.get('existing_height', '?')}"
         else:
@@ -368,9 +459,9 @@ def log_builder_event(event, **kwargs):
         context = kwargs.get("context", {})
         asset_type = kwargs.get("asset_type", "")
         if status_code == "UPGRADE_VOTES":
-            reason = f"Higher vote found: {context.get('new_votes')} (Cached: {context.get('cached_votes')}, Threshold: {context.get('vote_threshold')})"
+            reason = f"Vote average found: {context.get('new_votes')} (Cached: {context.get('cached_votes')}, Threshold: {context.get('vote_threshold')})"
         elif status_code == "UPGRADE_THRESHOLD":
-            reason = f"Meeting vote threshold: {context.get('new_votes')} (Threshold: {context.get('vote_threshold')})"
+            reason = f"Vote average threshold: {context.get('new_votes')} (Threshold: {context.get('vote_threshold')})"
         elif status_code == "UPGRADE_DIMENSIONS":
             reason = f"New dimensions: {context.get('new_width')}x{context.get('new_height')}, Existing: {context.get('existing_width', '?')}x{context.get('existing_height', '?')}"
         else:
@@ -392,10 +483,10 @@ def log_builder_event(event, **kwargs):
     else:
         logger.debug(msg)
 
-def log_asset_status(status_code, *, media_type, asset_type, full_title, filesize=None, error=None, extra=None, season_number=None):
-    """
-    Centralized handler for asset status logging.
-    """
+def log_asset_status(
+    status_code, *, media_type, asset_type, full_title, filesize=None, 
+    error=None, extra=None, season_number=None
+):
     event_map = {
         "NO_UPGRADE_NEEDED": "builder_no_upgrade_needed",
         "NO_IMAGE_FOR_COMPARE": "builder_no_image_for_compare",
@@ -422,38 +513,36 @@ def log_asset_status(status_code, *, media_type, asset_type, full_title, filesiz
         kwargs["season_number"] = season_number
     log_builder_event(event, **kwargs)
 
-def log_cleanup_event(event, **kwargs):
+def log_cleanup_event(event, logger=None, **kwargs):
     logger = kwargs.get("logger") or logging.getLogger()
     messages = {
-        "cleanup_start": "[Cleanup] Starting cleanup process...",
+        "cleanup_start": "[Cleanup] Libraries cleanup process starting...",
         "cleanup_error": "[Cleanup] Plex metadata is required but was not provided. Cleanup aborted...",
-        "cleanup_removed_cache_entry": "[Cleanup] Removed TMDb cache entry: {key}",
+        "cleanup_removed_cache_entry": "[Cleanup] Removing TMDb cache entry: {key}",
         "cleanup_skipping_nonpreferred": "[Cleanup] Skipping non-preferred library: {filename}",
-        "cleanup_removed_orphans": "[Cleanup] Removed {orphans_in_file} entries from {filename}",
+        "cleanup_removed_orphans": "[Cleanup] Removing {orphans_in_file} entries from {filename}",
         "cleanup_failed_remove_metadata": "[Cleanup] Failed to remove {filename}: {error}",
-        "cleanup_skipping_collection_asset": "[Cleanup] Skipping collection asset {description}: {path}",
         "cleanup_skipping_valid_asset": "[Cleanup] Skipping valid asset {description}: {path}",
-        "cleanup_removing_asset": "[Cleanup] Removing {description}: {path}",
-        "cleanup_removing_empty_dir": "[Cleanup] Removing empty directory: {parent}",
+        "cleanup_removing_asset": "[Cleanup] Removing {description} asset: {path}",
+        "cleanup_removing_empty_dir": "[Cleanup] Removing empty directory from disk: {parent}",
         "cleanup_failed_remove_asset": "[Cleanup] Failed to remove {description} {path}: {error}",
-        "cleanup_total_removed": "[Cleanup] Total titles removed: {orphans_removed}",
         "cleanup_consolidated_removed": "[Cleanup] {summary}",
+        "cleanup_total_removed": "[Cleanup] Total titles removed: {orphans_removed}",
         "cleanup_dry_run": "[Cleanup] [Dry Run] Would remove {description}: {path}",
     }
     levels = {
         "cleanup_start": "info",
         "cleanup_error": "error",
-        "cleanup_removed_cache_entry": "info",
+        "cleanup_removed_cache_entry": "debug",
         "cleanup_skipping_nonpreferred": "info",
-        "cleanup_removed_orphans": "info",
+        "cleanup_removed_orphans": "debug",
         "cleanup_failed_remove_metadata": "error",
-        "cleanup_skipping_collection_asset": "info",
         "cleanup_skipping_valid_asset": "info",
-        "cleanup_removing_asset": "info",
-        "cleanup_removing_empty_dir": "info",
+        "cleanup_removing_asset": "debug",
+        "cleanup_removing_empty_dir": "debug",
         "cleanup_failed_remove_asset": "warning",
-        "cleanup_total_removed": "info",
         "cleanup_consolidated_removed": "info",
+        "cleanup_total_removed": "info",
         "cleanup_dry_run": "info",
     }
     
@@ -465,7 +554,6 @@ def log_cleanup_event(event, **kwargs):
                 parts.append("cache entry")
             if types.get("yaml"):
                 parts.append("YAML entry")
-            # Dynamically add each asset type if present
             for asset_type in types.get("asset", []):
                 parts.append(f"asset ({asset_type})")
             if parts:
@@ -478,20 +566,31 @@ def log_cleanup_event(event, **kwargs):
     except Exception:
         pass
     level = levels.get(event, "info")
-    if level == "info":
-        logger.info(msg)
-    elif level == "warning":
-        logger.warning(msg)
-    elif level == "error":
-        logger.error(msg)
+    if event == "cleanup_consolidated_removed" and "removed_summary" in kwargs:
+        for line in msg.splitlines():
+            if level == "info":
+                logger.info(line)
+            elif level == "warning":
+                logger.warning(line)
+            elif level == "error":
+                logger.error(line)
+            else:
+                logger.debug(line)
     else:
-        logger.debug(msg)
+        if level == "info":
+            logger.info(msg)
+        elif level == "warning":
+            logger.warning(msg)
+        elif level == "error":
+            logger.error(msg)
+        else:
+            logger.debug(msg)
 
 def log_library_summary(
     library_name, completed, incomplete, total_items, percent_complete,
     poster_size=0, background_size=0, season_poster_size=0,
-    collection_poster_size=0, collection_background_size=0,
-    library_filesize=None, feature_flags=None, run_metadata=None, box_width=60
+    feature_flags=None, library_filesize=None, run_metadata=None,
+    logger=None,
 ):
     asset_summaries = []
     if feature_flags and feature_flags.get("poster") and poster_size > 0:
@@ -500,29 +599,23 @@ def log_library_summary(
         asset_summaries.append(f"Background: {human_readable_size(background_size)}")
     if feature_flags and feature_flags.get("season") and season_poster_size > 0:
         asset_summaries.append(f"Season: {human_readable_size(season_poster_size)}")
-    if feature_flags and feature_flags.get("collection"):
-        if collection_poster_size > 0:
-            asset_summaries.append(f"Collection Poster: {human_readable_size(collection_poster_size)}")
-        if collection_background_size > 0:
-            asset_summaries.append(f"Collection Background: {human_readable_size(collection_background_size)}")
     if library_filesize is not None and library_filesize.get(library_name, 0) > 0:
         asset_summaries.append(f"Total: {human_readable_size(library_filesize[library_name])} downloaded")
-    
-    logger = logger or logging.getLogger()  
+
+    logger = logger or logging.getLogger()
+    box_width = 80
     def box_line(text, width=box_width):
-        import textwrap
-        wrapped = textwrap.wrap(text, width=width-4)
-        return [f"|| {line.ljust(width-4)}||".rstrip() for line in wrapped]
+        wrapped = textwrap.wrap(text, width=width - 4)
+        return [f"|| {line.ljust(width - 4)} ||" for line in wrapped]
 
     header = "=" * box_width
-    title = "LIBRARY PROCESSING SUMMARY".center(box_width - 8)
+    title = "LIBRARY PROCESSING SUMMARY"
     lines = [
         header,
-        f"||{title}||",
+        f"|| {title.center(box_width - 4)} ||",
         header,
-        f"|| Library: {library_name.ljust(box_width - 16)}||"
+        f"|| {'Library: ' + library_name:<{box_width - 4}} ||"
     ]
-    # Dynamic metadata, asset, item summary
     if run_metadata:
         meta_line = f"Metadata: {completed}/{total_items} completed, {incomplete} incomplete ({percent_complete}%)"
         lines.extend(box_line(meta_line, box_width))
@@ -539,65 +632,42 @@ def log_final_summary(
     logger, elapsed_time, library_item_counts, metadata_summaries, library_filesize,
     orphans_removed, cleanup_title_orphans, selected_libraries, libraries, config,
 ):
-    box_width = 60
+    box_width = 80
     def box_line(text, width=box_width):
-        wrapped = textwrap.wrap(text, width=width-4)
-        return [f"|| {line.ljust(width-4)}||" for line in wrapped]
+        wrapped = textwrap.wrap(text, width=width - 4)
+        return [f"|| {line.ljust(width - 4)}||" for line in wrapped]
 
     border = "=" * box_width
-    title = "METAFUSION SUMMARY REPORT".center(box_width - 6)
+    title = "METAFUSION SUMMARY REPORT".center(box_width - 4)
     lines = [
         border,
-        f"||{title}||",
+        f"|| {title.center(box_width - 4)} ||",
         border
     ]
     minutes, seconds = divmod(int(elapsed_time), 60)
     lines.extend(box_line(f"Processing completed in {minutes} mins {seconds} secs.", box_width))
-
     skipped_libraries = [lib["title"] for lib in libraries if lib["title"] not in selected_libraries]
-    lines.extend(box_line(f"Libraries processed: {len(library_item_counts)} | skipped: {', '.join(skipped_libraries) if skipped_libraries else 'None'}", box_width))
-
-    # Items summary
+    lines.extend(box_line(f"Libraries processed: {len(library_item_counts)} | Skipped: {', '.join(skipped_libraries) if skipped_libraries else 'None'}", box_width))
     items_str = ", ".join(f"{lib} ({count})" for lib, count in library_item_counts.items())
     lines.extend(box_line(f"Items: {items_str}", box_width))
-
-    # Metadata summary
     meta_str = ", ".join(
         f"{lib} ({summary['complete']}/{summary['total_items']}, {summary['percent_complete']}%, {summary['incomplete']} incomplete)"
         for lib, summary in metadata_summaries.items()
     )
     lines.extend(box_line(f"Metadata: {meta_str}", box_width))
 
-    # Assets summary
     assets_str = ", ".join(f"{lib} ({human_readable_size(size)})" for lib, size in library_filesize.items())
     total_asset_size = sum(library_filesize.values())
     assets_line = f"Assets: {assets_str}, Total ({human_readable_size(total_asset_size)})"
     lines.extend(box_line(assets_line, box_width))
 
-    # Cleanup summary
     if cleanup_title_orphans:
-        lines.extend(box_line(f"Cleanup: Titles removed: {orphans_removed}", box_width))
+        lines.extend(box_line(f"Cleanup: {orphans_removed} title removed", box_width))
     if config["settings"].get("dry_run", False):
         lines.extend(box_line("[Dry Run] Completed. No files were written.", box_width))
     lines.append(border)
     for line in lines:
         logger.info(line)
-
-def meta_summary_banner(logger=None, width=50):
-    border = "=" * width
-    title = "METAFUSION SUMMARY REPORT".center(width - 4)
-    centered = f"|| {title} ||"
-    lines = [
-        border,
-        centered,
-        border,
-    ]
-    if logger:
-        for line in lines:
-            logger.info(line)
-    else:
-        for line in lines:
-            print(line)
             
 def human_readable_size(size, decimal_places=2):
     for unit in ['bytes', 'KB', 'MB', 'GB', 'TB']:

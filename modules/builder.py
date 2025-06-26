@@ -1,6 +1,4 @@
-import logging
-import shutil
-import asyncio
+import shutil, asyncio
 from helper.logging import log_builder_event, log_asset_status
 from helper.cache import meta_cache_async
 from helper.plex import get_plex_country
@@ -11,14 +9,12 @@ from modules.utils import (
 )
 
 async def build_movie(
-    config, consolidated_metadata, existing_yaml_data=None, session=None, ignored_fields=None,
-    existing_assets=None, library_name=None, meta=None, feature_flags=None
+    config, consolidated_metadata, feature_flags=None, existing_yaml_data=None, session=None, ignored_fields=None,
+    existing_assets=None, library_name=None, meta=None, 
 ):
     result = {
         "poster": {"size": 0},
         "background": {"size": 0},
-        "collection_poster": {"size": 0},
-        "collection_background": {"size": 0},
     }
         
     if not feature_flags or not feature_flags.get("metadata_basic", True):
@@ -35,9 +31,7 @@ async def build_movie(
     full_title = f"{title} ({year})"
     imdb_id_for_mapping = ""
     mapping_id = ""
-    collection_asset_paths = []
 
-    # If no TMDb ID, try searching by title
     if not tmdb_id:
         search_results = await tmdb_api_request(
             config,
@@ -62,7 +56,6 @@ async def build_movie(
     else:
         mapping_id = int(tmdb_id)
 
-    # Try to get movie details from cache, else fetch from TMDb
     details_key = f"movie/{tmdb_id}"
     details = tmdb_response_cache.get(details_key)
     if not details:
@@ -82,7 +75,6 @@ async def build_movie(
             log_builder_event("builder_invalid_tmdb_id", media_type="Movie", full_title=full_title)
             return
 
-    # Extract content rating (US certification)
     release_dates = get_meta_field(details, "results", [], path=["release_dates"])
     content_rating = next(
         (c.get("certification", "")
@@ -91,7 +83,6 @@ async def build_movie(
         for c in country.get("release_dates", []) if c.get("certification")), ""
     )
 
-    # Extract genres, studios, countries, etc.
     genres = [g.get("name", "") for g in get_meta_field(details, "genres", [])]
     studio = ", ".join([c.get("name", "") for c in get_meta_field(details, "production_companies", []) if c.get("name")]) or ""
     release_date = get_meta_field(details, "release_date", "")
@@ -100,18 +91,14 @@ async def build_movie(
     country_codes = [c.get("iso_3166_1", "") for c in production_countries if c.get("iso_3166_1")]
     countries = [get_plex_country(code) for code in country_codes]
 
-    # Use the first available release date as originally_available
     originally_available = release_date or ""
-
     runtime = get_meta_field(details, "runtime", None)
 
-    # Collection/franchise info
     collection_info = get_meta_field(details, "belongs_to_collection", {})
     collection_id = get_meta_field(collection_info, "id", None)
     collection_name = get_meta_field(collection_info, "name", "")
     cleaned_collection = collection_name.removesuffix(" Collection")
-    
-    # Crew roles
+
     director_jobs = {"Director", "Co-Director", "Assistant Director"}
     writer_jobs = {"Writer", "Screenplay", "Story", "Creator", "Co-Writer", "Author", "Adaptation"}
     producer_jobs = {"Producer", "Executive Producer", "Associate Producer", "Co-Producer", "Line Producer", "Co-Executive Producer"}
@@ -126,14 +113,13 @@ async def build_movie(
 
     basic_fields = [
         "sort_title", "original_title", "originally_available", "content_rating",
-        "studio", "runtime", "tagline", "summary", "country", "genre"
+        "studio", "runtime", "tagline", "summary", "country.sync", "genre.sync"
     ]
     enhanced_fields = [
-        "cast", "director", "writer", "producer", "collection"
+        "cast.sync", "director.sync", "writer.sync", "producer.sync", "collection.sync"
     ]
     fields_to_write = basic_fields + (enhanced_fields if feature_flags.get("metadata_enhanced", True) else [])
 
-    # Build metadata dictionary
     new_metadata = {k: v for k, v in {
         "sort_title": title,
         "original_title": get_meta_field(details, "original_title", title),
@@ -143,17 +129,16 @@ async def build_movie(
         "runtime": runtime,
         "tagline": get_meta_field(details, "tagline", ""),
         "summary": get_meta_field(details, "overview", ""),
-        "country": countries or [],
-        "genre": genres or [],
-        "cast": top_cast or [],
-        "director": directors or [],
-        "writer": writers or [],
-        "producer": producers or [],
-        "collection": cleaned_collection,
+        "country.sync": countries or [],
+        "genre.sync": genres or [],
+        "cast.sync": top_cast or [],
+        "director.sync": directors or [],
+        "writer.sync": writers or [],
+        "producer.sync": producers or [],
+        "collection.sync": cleaned_collection,
     }.items() if k in fields_to_write}
 
-    # Log completeness of metadata
-    expected_fields = [f for f in fields_to_write if f != "collection"]
+    expected_fields = [f for f in fields_to_write if f != "collection.sync"]
     if ignored_fields is None:
         ignored_fields = set()
     filtered_fields = [f for f in expected_fields if f not in ignored_fields]
@@ -168,7 +153,6 @@ async def build_movie(
         percent_filled = round((filled / len(filtered_fields)) * 100)
     percent = percent_filled
 
-    # Smart update: check if anything changed
     metadata_changed = False
     changes = []
     if existing_yaml_data:
@@ -210,7 +194,6 @@ async def build_movie(
             percent=percent, tmdb_id=tmdb_id, changes=changes
         )
 
-    # Movie poster assets downloads
     async def process_poster():
         poster_size = 0
         if not feature_flags or not feature_flags.get("poster", True):
@@ -244,7 +227,6 @@ async def build_movie(
         temp_path = asset_temp_path(config, library_name)
         try:
             success, url, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
-            file_path = best.get("file_path", "")
             if not success:
                 log_builder_event(
                     "builder_asset_download_failed", media_type="Movie", asset_type="poster",
@@ -285,7 +267,6 @@ async def build_movie(
                 temp_path.unlink(missing_ok=True)
         result["poster"]["size"] = poster_size
 
-    # Movie background assets downloads
     async def process_background():
         background_size = 0
         if not feature_flags or not feature_flags.get("background", True):
@@ -319,7 +300,6 @@ async def build_movie(
         temp_path = asset_temp_path(config, library_name)
         try:
             success, url, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
-            file_path = best.get("file_path", "")
             if not success:
                 log_builder_event(
                     "builder_asset_download_failed", media_type="Movie", asset_type="background",
@@ -360,194 +340,19 @@ async def build_movie(
                 temp_path.unlink(missing_ok=True)
         result["background"]["size"] = background_size
 
-    # Collection/franchise assets download 
-    if collection_id and feature_flags and feature_flags.get("collection", True):
-        collection_key = f"collection/{collection_id}"
-        collection_details = tmdb_response_cache.get(collection_key)
-        if not collection_details:
-            collection_details = await tmdb_api_request(
-                config,
-                collection_key,
-                params={
-                    "language": config.get("tmdb", {}).get("language", "en"),
-                    "append_to_response": "images"
-                },
-                session=session
-            )
-            if collection_details:
-                tmdb_response_cache[collection_key] = collection_details
-            else:
-                log_builder_event(
-                    "builder_no_tmdb_collection_data", media_type="Movie", collection_id=collection_id, 
-                    full_title=full_title
-            )
-                result["collection_poster"]["size"] = 0
-                result["collection_background"]["size"] = 0
-                return
-    
-        posters = get_meta_field(collection_details, "posters", [], path=["images"])
-        backdrops = get_meta_field(collection_details, "backdrops", [], path=["images"])
-        preferred_language = config["tmdb"].get("language", "en").split("-")[0]
-        fallback = config["tmdb"].get("fallback", [])
-    
-        # Collection poster assets downloads
-        async def process_collection_poster():
-            collection_poster_size = 0
-            if not feature_flags or not feature_flags.get("poster", True):
-                result["collection_poster"]["size"] = collection_poster_size
-                return
-
-            best = get_best_poster(config, posters, preferred_language=preferred_language, fallback=fallback, is_collection=True)
-            if not best:
-                log_builder_event("builder_no_suitable_asset", media_type="Movie", asset_type="collection", full_title=full_title, extra="")
-                result["collection_poster"]["size"] = collection_poster_size
-                return
-        
-            asset_path = get_asset_path(config, meta, asset_type="collection", collection_name=cleaned_collection)
-            if asset_path is None:
-                log_builder_event("builder_no_asset_path", media_type="Movie", asset_type="collection", full_title=full_title, extra="")
-                result["collection_poster"]["size"] = collection_poster_size
-                return
-
-            if feature_flags.get("dry_run", False):
-                log_builder_event("builder_dry_run_asset", media_type="Movie", asset_type="collection", full_title=full_title)
-                result["collection_poster"]["size"] = collection_poster_size
-                return
-        
-            collection_asset_paths.append(str(asset_path.resolve()))
-            temp_path = asset_temp_path(config, library_name)
-            try:
-                success, url, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
-                file_path = best.get("file_path", "")
-                if not success:
-                    log_builder_event(
-                        "builder_asset_download_failed", media_type="Movie", asset_type="collection",
-                        full_title=full_title, url=url, status=status, error=error
-                    )
-                if success and temp_path.exists():
-                    should_upgrade, status_code, context = smart_asset_upgrade(
-                        config, asset_path, best, new_image_path=temp_path, asset_type="collection", cache_key=cache_key
-                    )
-                    if should_upgrade:
-                        asset_path.parent.mkdir(parents=True, exist_ok=True)
-                        shutil.move(temp_path, asset_path)
-                        if temp_path.exists():
-                            temp_path.unlink(missing_ok=True)
-                        collection_poster_size = asset_path.stat().st_size if asset_path.exists() else 0
-                        await meta_cache_async(
-                            cache_key, tmdb_id, title, year, "collection",
-                            collection_id=collection_id, collection_average=best.get("vote_average", 0)
-                        )
-                        if status_code == "NO_EXISTING_ASSET":
-                            log_builder_event(
-                                "builder_downloading_asset", media_type="Movie", asset_type="collection",
-                                full_title=full_title, filesize=collection_poster_size
-                            )
-                        else:
-                            log_builder_event(
-                                "builder_asset_upgraded", media_type="Movie", asset_type="collection",
-                                full_title=full_title, status_code=status_code, context=context, filesize=collection_poster_size
-                            )
-                        existing_assets.add(str(asset_path.resolve()))
-                    else:
-                        collection_poster_size = asset_path.stat().st_size if asset_path.exists() else 0
-                        log_asset_status(
-                            status_code, media_type="Movie", asset_type="collection", full_title=full_title,
-                            filesize=collection_poster_size, error=context.get("error") if context else None, extra="", season_number=None
-                        )
-                        if asset_path.exists():
-                            existing_assets.add(str(asset_path.resolve()))
-            finally:
-                if temp_path.exists():
-                    temp_path.unlink(missing_ok=True)
-            result["collection_poster"]["size"] = collection_poster_size
-    
-        # Collection background assets downloads
-        async def process_collection_background():
-            collection_background_size = 0
-            if not feature_flags or not feature_flags.get("background", True):
-                result["collection_background"]["size"] = collection_background_size
-                return
-
-            best = get_best_background(config, backdrops, preferred_language=preferred_language, fallback=fallback, is_collection=True)
-            if not best:
-                log_builder_event("builder_no_suitable_asset", media_type="Movie", asset_type="collection", full_title=full_title, extra="")
-                result["collection_background"]["size"] = collection_background_size
-                return
-        
-            asset_path = get_asset_path(config, meta, asset_type="collection_background", collection_name=cleaned_collection)
-            if asset_path is None:
-                log_builder_event("builder_no_asset_path", media_type="Movie", asset_type="collection", full_title=full_title, extra="")
-                result["collection_background"]["size"] = collection_background_size
-                return
-
-            if feature_flags.get("dry_run", False):
-                log_builder_event("builder_dry_run_asset", media_type="Movie", asset_type="collection", full_title=full_title)
-                result["collection_background"]["size"] = collection_background_size
-                return
-                    
-            collection_asset_paths.append(str(asset_path.resolve()))
-            temp_path = asset_temp_path(config, library_name)
-            try:
-                success, url, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
-                file_path = best.get("file_path", "")
-                if not success:
-                    log_builder_event(
-                        "builder_asset_download_failed", media_type="Movie", asset_type="collection",
-                        full_title=full_title, url=url, status=status, error=error
-                    )
-                if success and temp_path.exists():
-                    should_upgrade, status_code, context = smart_asset_upgrade(
-                        config, asset_path, best, new_image_path=temp_path, asset_type="collection_background", cache_key=cache_key
-                    )
-                    if should_upgrade:
-                        asset_path.parent.mkdir(parents=True, exist_ok=True)
-                        shutil.move(temp_path, asset_path)
-                        if temp_path.exists():
-                            temp_path.unlink(missing_ok=True)
-                        collection_background_size = asset_path.stat().st_size if asset_path.exists() else 0
-                        await meta_cache_async(
-                            cache_key, tmdb_id, title, year, "collection",
-                            collection_id=collection_id, collection_bg_average=best.get("vote_average", 0)
-                        )
-                        if status_code == "NO_EXISTING_ASSET":
-                            log_builder_event(
-                                "builder_downloading_asset", media_type="Movie", asset_type="collection",
-                                full_title=full_title, filesize=collection_background_size
-                            )
-                        else:
-                            log_builder_event(
-                                "builder_asset_upgraded", media_type="Movie", asset_type="collection",
-                                full_title=full_title, status_code=status_code, context=context, filesize=collection_background_size
-                            )
-                        existing_assets.add(str(asset_path.resolve()))
-                    else:
-                        collection_background_size = asset_path.stat().st_size if asset_path.exists() else 0
-                        log_asset_status(
-                            status_code, media_type="Movie", asset_type="collection", full_title=full_title,
-                            filesize=collection_background_size, error=context.get("error") if context else None, extra="", season_number=None
-                        )
-                        if asset_path.exists():
-                            existing_assets.add(str(asset_path.resolve()))
-            finally:
-                if temp_path.exists():
-                    temp_path.unlink(missing_ok=True)
-            result["collection_background"]["size"] = collection_background_size
-
-    tasks = [process_poster(), process_background()]
-    if collection_id and feature_flags and feature_flags.get("collection", True):
-        tasks.append(process_collection_poster())
-        tasks.append(process_collection_background())
-    await asyncio.gather(*tasks)
+    await asyncio.gather(
+        process_poster(),
+        process_background(),
+    )
     
     return {
         "percent": percent,
         **result
-    }, collection_asset_paths
+    }
 
 async def build_tv(
-    config, consolidated_metadata, existing_yaml_data=None, session=None, ignored_fields=None,
-    existing_assets=None, library_name=None, meta=None, feature_flags=None
+    config, consolidated_metadata, feature_flags=None, existing_yaml_data=None, session=None, ignored_fields=None,
+    existing_assets=None, library_name=None, meta=None, 
 ):
     result = {
         "poster": {"size": 0},
@@ -569,7 +374,6 @@ async def build_tv(
     show_path = meta.get("show_path") if meta else None
     seasons_episodes = meta.get("seasons_episodes") if meta else None
 
-    # If no TMDb ID, try searching by title
     if not tmdb_id:
         search_results = await tmdb_api_request(
             config,
@@ -611,7 +415,6 @@ async def build_tv(
             "background": {"size": 0}
         }
 
-    # Try to get TV show details from cache, else fetch from TMDb
     details_key = f"tv/{tmdb_id_int}"
     details = tmdb_response_cache.get(details_key)
     if not details:
@@ -650,12 +453,11 @@ async def build_tv(
 
     show_basic_fields = [
         "sort_title", "original_title", "originally_available", "content_rating",
-        "studio", "summary", "country", "genre", "seasons"
+        "studio", "summary", "country.sync", "genre.sync", "seasons"
     ]
     show_enhanced_fields = ["tagline"]
     show_fields_to_write = show_basic_fields + (show_enhanced_fields if feature_flags.get("metadata_enhanced", True) else [])
-
-    # Build metadata dictionary
+    
     new_metadata = {k: v for k, v in {
         "sort_title": title,
         "original_title": details.get("original_name", title),
@@ -664,8 +466,8 @@ async def build_tv(
         "studio": studio or "",
         "tagline": details.get("tagline", ""),
         "summary": details.get("overview", ""),
-        "genre": genres or [],
-        "country": countries or [],
+        "genre.sync": genres or [],
+        "country.sync": countries or [],
     }.items() if k in show_fields_to_write and (k != "seasons")}
 
     seasons_data = {}
@@ -721,7 +523,7 @@ async def build_tv(
             ep_runtime = get_meta_field(episode, "runtime", None)
 
             ep_basic_fields = ["sort_title", "original_title", "originally_available", "runtime", "summary"]
-            ep_enhanced_fields = ["cast", "guest", "director", "writer"]
+            ep_enhanced_fields = ["cast.sync", "guest.sync", "director.sync", "writer.sync"]
             ep_fields_to_write = ep_basic_fields + (ep_enhanced_fields if config["metadata"].get("run_enhanced", True) else [])
 
             episode_dict = {k: v for k, v in {
@@ -730,10 +532,10 @@ async def build_tv(
                 "originally_available": ep_air_date,
                 "runtime": ep_runtime,
                 "summary": get_meta_field(episode, "overview", ""),
-                "cast": ep_cast or [],
-                "guest": ep_guest_stars or [],
-                "director": ep_directors or [],
-                "writer": ep_writers or [],
+                "cast.sync": ep_cast or [],
+                "guest.sync": ep_guest_stars or [],
+                "director.sync": ep_directors or [],
+                "writer.sync": ep_writers or [],
             }.items() if k in ep_fields_to_write}
             episodes[ep_num] = episode_dict
 
@@ -765,7 +567,6 @@ async def build_tv(
         "seasons": seasons_data
     }
 
-    # Log completeness of metadata
     expected_fields = [f for f in show_fields_to_write if f != "seasons"]
     if ignored_fields is None:
         ignored_fields = set()
@@ -781,7 +582,6 @@ async def build_tv(
         percent_filled = round((filled / len(filtered_fields)) * 100)
     grand_percent = percent_filled
 
-    # Smart update: check if anything changed
     metadata_changed = False
     changes = []
     if existing_yaml_data:
@@ -809,7 +609,6 @@ async def build_tv(
             full_title=full_title, percent=grand_percent, tmdb_id=tmdb_id, changes=changes
         )
 
-    # TV Show poster assets downloads
     async def process_tv_poster():
         poster_size = 0
         if not feature_flags or not feature_flags.get("poster", True):
@@ -843,7 +642,6 @@ async def build_tv(
         temp_path = asset_temp_path(config, library_name)
         try:
             success, url, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
-            file_path = best.get("file_path", "")
             if not success:
                 log_builder_event(
                     "builder_asset_download_failed", media_type="TV Show", asset_type="poster",
@@ -885,7 +683,6 @@ async def build_tv(
                 temp_path.unlink(missing_ok=True)
         result["poster"]["size"] = poster_size
 
-    # TV Show background assets downloads
     async def process_tv_background():
         background_size = 0
         if not config["assets"].get("run_background", True):
@@ -919,7 +716,6 @@ async def build_tv(
         temp_path = asset_temp_path(config, library_name)
         try:
             success, url, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
-            file_path = best.get("file_path", "")
             if not success:
                 log_builder_event(
                     "builder_asset_download_failed", media_type="TV Show", asset_type="background",
@@ -961,7 +757,6 @@ async def build_tv(
                 temp_path.unlink(missing_ok=True)
         result["background"]["size"] = background_size
 
-    # TV Show season posters assets downloads
     async def process_season_poster(season_info):
         season_poster_size = 0
         season_number = season_info.get("season_number")
@@ -1001,7 +796,6 @@ async def build_tv(
         temp_path = asset_temp_path(config, library_name)
         try:
             success, url, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
-            file_path = best.get("file_path", "")
             if not success:
                 log_builder_event(
                     "builder_asset_download_failed_season", media_type="TV Show", asset_type="poster",
@@ -1025,7 +819,7 @@ async def build_tv(
                     if status_code == "NO_EXISTING_ASSET":
                         log_builder_event(
                             "builder_downloading_asset_season", media_type="TV Show", asset_type="poster",
-                            full_title=full_title, season_number=season_number, filesize=season_poster_size, file_path=file_path 
+                            full_title=full_title, season_number=season_number, filesize=season_poster_size
                         )
                     else:
                         log_builder_event(
@@ -1043,7 +837,7 @@ async def build_tv(
                     }
                     season_status_code = season_status_map.get(status_code, status_code)
                     log_asset_status(
-                        status_code, media_type="TV Show", asset_type="poster", full_title=full_title,
+                        season_status_code, media_type="TV Show", asset_type="poster", full_title=full_title,
                         filesize=season_poster_size, error=context.get("error") if context else None, extra="", season_number=season_number
                     )
                     if asset_path.exists():
@@ -1053,7 +847,6 @@ async def build_tv(
                 temp_path.unlink(missing_ok=True)
         result["season_posters"][season_number] = season_poster_size
     
-    # Prepare all season poster tasks
     season_poster_tasks = []
     if config["assets"].get("run_season", True):
         for season_info in season_infos:

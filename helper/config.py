@@ -1,10 +1,8 @@
 import os
-import logging
 from ruamel.yaml import YAML
 from pathlib import Path
-from helper.logging import log_helper_event
+from helper.logging import log_config_event
 
-# Path to the user configuration file
 CONFIG_FILE = Path(
     os.environ.get(
         "CONFIG_FILE",
@@ -12,7 +10,6 @@ CONFIG_FILE = Path(
     )
 )
 
-# Default configuration
 DEFAULT_CONFIG = {
     "metafusion_run": True,
     "settings": {
@@ -40,7 +37,6 @@ DEFAULT_CONFIG = {
     "assets": {
         "path": "assets",
         "mode": "kometa",
-        "run_collection": False,
         "run_poster": True,
         "run_season": True,
         "run_background": False,
@@ -75,7 +71,7 @@ def get_disabled_features(config, logger):
         (("assets", "run_poster"), "Poster Assets Download"),
         (("assets", "run_season"), "Season Assets Download"),
         (("assets", "run_background"), "Background Assets Download"),
-        (("cleanup", "run_process"), "Titles Cleanup"),
+        (("cleanup", "run_process"), "Cleanup Libraries"),
     ]
     for key_tuple, feature in features:
         sub_config = config
@@ -85,28 +81,25 @@ def get_disabled_features(config, logger):
                 break
         enabled = bool(sub_config)
         event = "feature_enabled" if enabled else "feature_disabled"
-        log_helper_event(event, feature=feature)
+        log_config_event(event, feature=feature)
 
-def config_enabled(config, feature):
-    feature_map = {
-        "dry_run": lambda c: c.get("settings", {}).get("dry_run", False),
-        "metadata_basic": lambda c: c.get("metadata", {}).get("run_basic", True),
-        "metadata_enhanced": lambda c: c.get("metadata", {}).get("run_enhanced", True),
-        "poster": lambda c: c.get("assets", {}).get("run_poster", True),
-        "season": lambda c: c.get("assets", {}).get("run_season", True),
-        "background": lambda c: c.get("assets", {}).get("run_background", False),
-        "collection": lambda c: c.get("assets", {}).get("run_collection", False),
-        "cleanup": lambda c: c.get("cleanup", {}).get("run_process", False),
+def get_feature_flags(config):
+    feature_flags = {
+        "dry_run": config.get("settings", {}).get("dry_run", False),
+        "metadata_basic": config.get("metadata", {}).get("run_basic", True),
+        "metadata_enhanced": config.get("metadata", {}).get("run_enhanced", True),
+        "poster": config.get("assets", {}).get("run_poster", True),
+        "season": config.get("assets", {}).get("run_season", True),
+        "background": config.get("assets", {}).get("run_background", False),
+        "cleanup": config.get("cleanup", {}).get("run_process", False),
     }
-    if feature not in feature_map:
-        raise ValueError
-    return feature_map[feature](config)
+    return feature_flags
 
 def warn_unknown_keys(user_cfg, default_cfg, parent_key=""):
     for key in user_cfg:
         if key not in default_cfg:
             full_key = f"{parent_key}.{key}" if parent_key else key
-            log_helper_event("unknown_key", key=full_key)
+            log_config_event("unknown_key", key=full_key)
         elif isinstance(user_cfg[key], dict) and isinstance(default_cfg[key], dict):
             warn_unknown_keys(user_cfg[key], default_cfg[key], parent_key=f"{parent_key}.{key}" if parent_key else key)
 
@@ -132,15 +125,23 @@ def env_variable_overrides(config, prefix=""):
                     try:
                         config[key] = int(env_val)
                     except ValueError:
+                        log_config_event(
+                            "env_override_invalid", env_key=env_key, env_val=env_val,
+                            expected_type="int", old_val=old_val
+                        )
                         config[key] = value
                 elif isinstance(value, float):
                     try:
                         config[key] = float(env_val)
                     except ValueError:
+                        log_config_event(
+                            "env_override_invalid", env_key=env_key, env_val=env_val,
+                            expected_type="float", old_val=old_val
+                        )
                         config[key] = value
                 else:
                     config[key] = env_val
-                log_helper_event("env_override", env_key=env_key, env_val=env_val, old_val=old_val)
+                log_config_event("env_override", env_key=env_key, env_val=env_val, old_val=old_val)
 
 def load_config_file():
     if not CONFIG_FILE.exists():
@@ -148,9 +149,9 @@ def load_config_file():
         if template_path.exists():
             import shutil
             shutil.copy(template_path, CONFIG_FILE)
-            log_helper_event("yaml_not_found", config_file=CONFIG_FILE)
+            log_config_event("yaml_not_found", config_file=CONFIG_FILE)
         else:
-            log_helper_event("yaml_missing", config_file=CONFIG_FILE)
+            log_config_event("yaml_missing", config_file=CONFIG_FILE)
 
     config = DEFAULT_CONFIG.copy()
     if CONFIG_FILE.exists():
@@ -160,11 +161,11 @@ def load_config_file():
                 user_config = yaml.load(f) or {}
                 warn_unknown_keys(user_config, DEFAULT_CONFIG)
                 merge_config_dicts(config, user_config)
-                log_helper_event("config_loaded", config_file=CONFIG_FILE)
+                log_config_event("config_loaded", config_file=CONFIG_FILE)
             except yaml.YAMLError:
-                log_helper_event("yaml_parse_error", config_file=CONFIG_FILE)
+                log_config_event("yaml_parse_error", config_file=CONFIG_FILE)
     else:
-        log_helper_event("config_missing", config_file=CONFIG_FILE)
+        log_config_event("config_missing", config_file=CONFIG_FILE)
 
     env_variable_overrides(config)
     return config

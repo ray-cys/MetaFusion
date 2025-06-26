@@ -37,7 +37,6 @@ metadata:
 assets:
   path: "/path/to/assets/"
   mode: "kometa"  # or "plex"
-  run_collection: false
   run_poster: true
   run_season: true
   run_background: false
