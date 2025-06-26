@@ -1,140 +1,159 @@
 import os
-import logging
 from ruamel.yaml import YAML
 from pathlib import Path
+from helper.logging import log_config_event
 
-# Path to the user configuration file
 CONFIG_FILE = Path(
     os.environ.get(
         "CONFIG_FILE",
-        str(Path(__file__).parent.parent / "config.yml")
+        "/config/config.yml" if os.path.exists("/config") else str(Path(__file__).parent.parent / "config.yml")
     )
 )
 
-# Default configuration at module level
 DEFAULT_CONFIG = {
-    "dry_run": False,
-    "log_level": "INFO",
-    "plex": {
-        "url": "",
-        "token": ""
+    "metafusion_run": True,
+    "settings": {
+        "schedule": None,
+        "dry_run": False,
+        "log_level": "INFO",
     },
+    "plex": {
+        "url": "PLEX_URL",
+        "token": "PLEX_TOKEN",
+    },
+    "plex_libraries": [
+        "Movies", "TV Shows"
+    ],
     "tmdb": {
-        "api_key": "",
+        "api_key": "TMDB_API_KEY",
         "language": "en",
         "region": "US",
         "fallback": ["zh", "ja"]
     },
-    "preferred_libraries": [
-        "Movies", "TV Shows"
-    ],
-    "process_metadata": True,
-    "enhanced_metadata": True,
-    "process_posters": True,
-    "process_season_posters": True,
-    "process_backgrounds": True,
-    "cleanup": {"run_by_default": True, "skip_by_default": False},
-    "cleanup_orphans": True,
-    "metadata_path": "metadata",
-    "assets_path": "assets",
-    "upgrade_schedule": {
-        "frequency": "daily",
-        "days": [1, 4],
-        "times": 4,
+    "metadata": {
+        "directory": "metadata",
+        "run_basic": True,
+        "run_enhanced": True,
     },
-    "poster_selection": {
-        "preferred_width": 2000,
-        "preferred_height": 3000,
+    "assets": {
+        "path": "assets",
+        "mode": "kometa",
+        "run_poster": True,
+        "run_season": True,
+        "run_background": False,
+    },
+    "cleanup": {
+        "run_process": False
+    },
+    "poster_set": {
+        "max_width": 2000,
+        "max_height": 3000,
         "min_width": 1000,
         "min_height": 1500,
-        "preferred_vote": 5.0,
+        "prefer_vote": 5.0,
         "vote_relaxed": 3.5,
-        "vote_average_threshold": 5.0
+        "vote_threshold": 5.0
     },
-    "background_selection": {
-        "preferred_width": 3840,
-        "preferred_height": 2160,
+    "background_set": {
+        "max_width": 3840,
+        "max_height": 2160,
         "min_width": 1920,
         "min_height": 1080,
-        "preferred_vote": 5.0,
+        "prefer_vote": 5.0,
         "vote_relaxed": 3.5,
-        "vote_average_threshold": 5.0
+        "vote_threshold": 5.0
     },
 }
 
-def log_disabled_features(config, logger):
-    """
-    Log which major processing features are disabled in the config.
-    """
+def get_disabled_features(config, logger):
     features = [
-        ("process_metadata", "Metadata Extraction"),
-        ("process_posters", "Poster Assets Download"),
-        ("process_season_posters", "Season Assets Download"),
-        ("process_backgrounds", "Background Assets Download"),
-        ("cleanup_orphans", "Orphan Cleanup"),
+        (("metadata", "run_basic"), "Metadata Extraction"),
+        (("metadata", "run_enhanced"), "Enhanced Metadata Extraction"),
+        (("assets", "run_poster"), "Poster Assets Download"),
+        (("assets", "run_season"), "Season Assets Download"),
+        (("assets", "run_background"), "Background Assets Download"),
+        (("cleanup", "run_process"), "Cleanup Libraries"),
     ]
-    for key, desc in features:
-        if not config.get(key, True):
-            logger.info(f"[Config] {desc} is DISABLED in config and will not run.")
+    for key_tuple, feature in features:
+        sub_config = config
+        for k in key_tuple:
+            sub_config = sub_config.get(k, None)
+            if sub_config is None:
+                break
+        enabled = bool(sub_config)
+        event = "feature_enabled" if enabled else "feature_disabled"
+        log_config_event(event, feature=feature)
+
+def get_feature_flags(config):
+    feature_flags = {
+        "dry_run": config.get("settings", {}).get("dry_run", False),
+        "metadata_basic": config.get("metadata", {}).get("run_basic", True),
+        "metadata_enhanced": config.get("metadata", {}).get("run_enhanced", True),
+        "poster": config.get("assets", {}).get("run_poster", True),
+        "season": config.get("assets", {}).get("run_season", True),
+        "background": config.get("assets", {}).get("run_background", False),
+        "cleanup": config.get("cleanup", {}).get("run_process", False),
+    }
+    return feature_flags
 
 def warn_unknown_keys(user_cfg, default_cfg, parent_key=""):
-    """
-    Warn about unknown keys in the user configuration.
-    """
     for key in user_cfg:
         if key not in default_cfg:
-            # Log a warning for unknown keys
             full_key = f"{parent_key}.{key}" if parent_key else key
-            logging.warning(f"[Config] Unknown config key in config.yml: {full_key}")
-        # Recursively check nested dictionaries
+            log_config_event("unknown_key", key=full_key)
         elif isinstance(user_cfg[key], dict) and isinstance(default_cfg[key], dict):
             warn_unknown_keys(user_cfg[key], default_cfg[key], parent_key=f"{parent_key}.{key}" if parent_key else key)
 
-def deep_merge_dicts(default, user):
-    """
-    Recursively merge user configuration into the default configuration.
-    """
+def merge_config_dicts(default, user):
     for k, v in user.items():
         if isinstance(v, dict) and isinstance(default.get(k), dict):
-            # Recursively merge nested dictionaries
-            deep_merge_dicts(default[k], v)
+            merge_config_dicts(default[k], v)
         else:
-            # Override default value with user value
             default[k] = v
 
-def apply_env_overrides(config, prefix=""):
-    """
-    Recursively override config values with environment variables.
-    For nested keys, use underscores, e.g., PLEX_URL, ASSETS_PATH.
-    """
+def env_variable_overrides(config, prefix=""):
     for key, value in config.items():
         env_key = (prefix + "_" + key).upper() if prefix else key.upper()
         if isinstance(value, dict):
-            apply_env_overrides(value, env_key)
+            env_variable_overrides(value, env_key)
         else:
             env_val = os.environ.get(env_key)
             if env_val is not None:
-                # Try to cast to correct type (bool, int, float)
+                old_val = config[key]
                 if isinstance(value, bool):
                     config[key] = env_val.lower() in ("1", "true", "yes", "on")
                 elif isinstance(value, int):
                     try:
                         config[key] = int(env_val)
                     except ValueError:
+                        log_config_event(
+                            "env_override_invalid", env_key=env_key, env_val=env_val,
+                            expected_type="int", old_val=old_val
+                        )
                         config[key] = value
                 elif isinstance(value, float):
                     try:
                         config[key] = float(env_val)
                     except ValueError:
+                        log_config_event(
+                            "env_override_invalid", env_key=env_key, env_val=env_val,
+                            expected_type="float", old_val=old_val
+                        )
                         config[key] = value
                 else:
                     config[key] = env_val
+                log_config_event("env_override", env_key=env_key, env_val=env_val, old_val=old_val)
 
-def load_config():
-    """
-    Load the configuration from config.yml, merging it with the default configuration,
-    and override any value with environment variables if present.
-    """
+def load_config_file():
+    if not CONFIG_FILE.exists():
+        template_path = Path(__file__).parent.parent / "config_template.yml"
+        if template_path.exists():
+            import shutil
+            shutil.copy(template_path, CONFIG_FILE)
+            log_config_event("yaml_not_found", config_file=CONFIG_FILE)
+        else:
+            log_config_event("yaml_missing", config_file=CONFIG_FILE)
+
     config = DEFAULT_CONFIG.copy()
     if CONFIG_FILE.exists():
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
@@ -142,8 +161,12 @@ def load_config():
                 yaml = YAML()
                 user_config = yaml.load(f) or {}
                 warn_unknown_keys(user_config, DEFAULT_CONFIG)
-                deep_merge_dicts(config, user_config)
+                merge_config_dicts(config, user_config)
+                log_config_event("config_loaded", config_file=CONFIG_FILE)
             except yaml.YAMLError:
-                logging.error("[Config] Failed to parse config.yml. Using default configuration.")
-    apply_env_overrides(config)
+                log_config_event("yaml_parse_error", config_file=CONFIG_FILE)
+    else:
+        log_config_event("config_missing", config_file=CONFIG_FILE)
+
+    env_variable_overrides(config)
     return config

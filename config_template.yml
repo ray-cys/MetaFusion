@@ -1,15 +1,23 @@
 # Plex Metadata Generator & Asset Downloader Configuration Template
 
-# Dry run
-dry_run: false
+# Force run of MetaFusion
+metafusion_run: true
 
-# Logging
-log_level: "INFO"
+# Dry run and logging configuration
+settings:
+  schedule: "0 3 * * *"
+  dry_run: false
+  log_level: "INFO"
 
 # Plex server configuration
 plex:
   url: "http://your-plex-server:32400"
   token: "YOUR_PLEX_TOKEN"
+
+# Plex libraries to process
+plex_libraries:
+  - Movies
+  - TV Shows
 
 # TMDb API configuration
 tmdb:
@@ -21,39 +29,38 @@ tmdb:
     - ja
     - fr
 
-# Plex libraries to process
-preferred_libraries:
-  - Movies
-  - TV Shows
-
 # Metadata and asset processing options
-process_metadata: true
-enhanced_metadata: true
-process_assets: true
-process_season_posters: true
-process_backgrounds: true
-cleanup_orphans: true
+metadata:
+  directory: "/path/to/metadata/"
+  run_basic: true
+  run_enhanced: true
 
-# Metadata and Assets path
-metadata_path: "/path/to/metadata/"
-assets_path: "/path/to/assets/"
+assets:
+  path: "/path/to/assets/"
+  mode: "kometa"  # or "plex"
+  run_poster: true
+  run_season: true
+  run_background: false
 
-# Poster selection preferences (Only if process_posters is true)
-poster_selection:
-  preferred_width: 2000
-  preferred_height: 3000
+cleanup:
+  run_process: true
+
+# Poster selection preferences (Only if run_poster is true)
+poster_set:
+  max_width: 2000
+  max_height: 3000
   min_width: 1000
   min_height: 1500
-  preferred_vote: 5.0
+  prefer_vote: 5.0
   vote_relaxed: 3.5
-  vote_average_threshold: 5.0
+  vote_threshold: 5.0
 
-# Background selection preferences (Only if process_backgrounds is true)
-background_selection:
-  preferred_width: 3840
-  preferred_height: 2160
+# Background selection preferences (Only if run_background is true)
+background_set:
+  max_width: 3840
+  max_height: 2160
   min_width: 1920
   min_height: 1080
-  preferred_vote: 5.0
+  prefer_vote: 5.0
   vote_relaxed: 3.5
-  vote_average_threshold: 5.0
+  vote_threshold: 5.0
