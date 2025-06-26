@@ -9,11 +9,10 @@ def get_setup_logging(config):
     script_name = Path(sys.argv[0]).stem
     log_dir = Path(
         os.environ.get(
-            "LOG_DIR",
-            "/config/logs" if os.path.exists("/config") else str(Path(__file__).parent.parent / "logs")
+            "LOG_DIR", str(Path(__file__).parent.parent / "logs")
         )
     )
-    log_dir.mkdir(exist_ok=True)
+    log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / f"{script_name}.log"
 
     for i in range(5, 0, -1):
