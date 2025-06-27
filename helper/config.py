@@ -1,14 +1,8 @@
-import os
 from ruamel.yaml import YAML
 from pathlib import Path
 from helper.logging import log_config_event
 
-CONFIG_DIR = Path(
-    os.environ.get(
-        "CONFIG_DIR",
-        str(Path(__file__).parent.parent / "config.yml")
-    )
-)
+CONFIG_FILE = Path(__file__).parent.parent / "config.yml"
 
 DEFAULT_CONFIG = {
     "metafusion_run": True,
@@ -111,62 +105,28 @@ def merge_config_dicts(default, user):
         else:
             default[k] = v
 
-def env_variable_overrides(config, prefix=""):
-    for key, value in config.items():
-        env_key = (prefix + "_" + key).upper() if prefix else key.upper()
-        if isinstance(value, dict):
-            env_variable_overrides(value, env_key)
-        else:
-            env_val = os.environ.get(env_key)
-            if env_val is not None:
-                old_val = config[key]
-                if isinstance(value, bool):
-                    config[key] = env_val.lower() in ("1", "true", "yes", "on")
-                elif isinstance(value, int):
-                    try:
-                        config[key] = int(env_val)
-                    except ValueError:
-                        log_config_event(
-                            "env_override_invalid", env_key=env_key, env_val=env_val,
-                            expected_type="int", old_val=old_val
-                        )
-                        config[key] = value
-                elif isinstance(value, float):
-                    try:
-                        config[key] = float(env_val)
-                    except ValueError:
-                        log_config_event(
-                            "env_override_invalid", env_key=env_key, env_val=env_val,
-                            expected_type="float", old_val=old_val
-                        )
-                        config[key] = value
-                else:
-                    config[key] = env_val
-                log_config_event("env_override", env_key=env_key, env_val=env_val, old_val=old_val)
-
 def load_config_file():
-    if not CONFIG_DIR.exists():
+    if not CONFIG_FILE.exists():
         template_path = Path(__file__).parent.parent / "config_template.yml"
         if template_path.exists():
             import shutil
-            shutil.copy(template_path, CONFIG_DIR)
-            log_config_event("yaml_not_found", config_file=CONFIG_DIR)
+            shutil.copy(template_path, CONFIG_FILE)
+            log_config_event("yaml_not_found", config_file=CONFIG_FILE)
         else:
-            log_config_event("yaml_missing", config_file=CONFIG_DIR)
+            log_config_event("yaml_missing", config_file=CONFIG_FILE)
 
     config = DEFAULT_CONFIG.copy()
-    if CONFIG_DIR.exists():
-        with open(CONFIG_DIR, "r", encoding="utf-8") as f:
+    if CONFIG_FILE.exists():
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             try:
                 yaml = YAML()
                 user_config = yaml.load(f) or {}
                 warn_unknown_keys(user_config, DEFAULT_CONFIG)
                 merge_config_dicts(config, user_config)
-                log_config_event("config_loaded", config_file=CONFIG_DIR)
+                log_config_event("config_loaded", config_file=CONFIG_FILE)
             except yaml.YAMLError:
-                log_config_event("yaml_parse_error", config_file=CONFIG_DIR)
+                log_config_event("yaml_parse_error", config_file=CONFIG_FILE)
     else:
-        log_config_event("config_missing", config_file=CONFIG_DIR)
+        log_config_event("config_missing", config_file=CONFIG_FILE)
 
-    env_variable_overrides(config)
     return config
