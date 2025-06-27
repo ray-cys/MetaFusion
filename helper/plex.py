@@ -329,7 +329,6 @@ def connect_plex_library(config, selected_libraries=None):
     return plex, sections, libraries, selected_libraries, all_libraries
 
 _plex_cache = {}
-
 async def get_plex_metadata(item, _season_cache=None, _episode_cache=None, _movie_cache=None):
     global _plex_cache
     if _season_cache is None:
