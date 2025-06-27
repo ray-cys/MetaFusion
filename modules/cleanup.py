@@ -54,10 +54,8 @@ async def cleanup_title_orphans(
             orphans_removed += 1
     save_cache(cache)
 
-    plex_libraries = config.get("plex_libraries", [])
-    preferred_filenames = {
-        f"{lib.lower().replace(' ', '_')}.yml" for lib in plex_libraries
-    }
+    library_types = {"movie", "tv", "show"} 
+    preferred_filenames = {f"{lt}_metadata.yml" for lt in library_types}
     metadata_dir = Path(config["metadata"]["directory"])
     def extract_title_year(orphan_title):
         if " (" in orphan_title and orphan_title.endswith(")"):

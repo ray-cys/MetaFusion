@@ -61,17 +61,11 @@ async def process_library(
     if ignored_fields is None:
         ignored_fields = {"collection", "guest"}
     existing_yaml_data = {}
-    
-    if output_path.exists():
-        try:
-            with open(output_path, "r", encoding="utf-8") as f:
-                yaml = YAML()
-                existing_yaml_data = yaml.load(f) or {}
-        except Exception as e:
-            log_processing_event("processing_failed_parse_yaml", output_path=output_path, error=str(e))
 
-    consolidated_metadata = existing_yaml_data if existing_yaml_data else {"metadata": {}}
-    existing_assets = set()
+    if library_item_counts is not None:
+        library_item_counts[library_name] = 0
+    if library_filesize is not None:
+        library_filesize[library_name] = 0
 
     poster_size = 0
     background_size = 0
@@ -99,20 +93,26 @@ async def process_library(
             key = (meta.get("title"), meta.get("year"), media_type)
             plex_metadata_dict[key] = meta
 
-    if plex_metadata_dict:
-        first_meta = next(iter(plex_metadata_dict.values()))
-        library_type = first_meta.get("library_type", "unknown").lower()
-        if library_type == "show":
-            library_type = "tv"
-    else:
-        library_type = "unknown"
-    output_path = Path(config["metadata"]["directory"]) / f"{library_type}_metadata.yml"
+        if plex_metadata_dict:
+            first_meta = next(iter(plex_metadata_dict.values()))
+            library_type = first_meta.get("library_type", "unknown").lower()
+            if library_type == "show":
+                library_type = "tv"
+        else:
+            library_type = "unknown"
+        output_path = Path(config["metadata"]["directory"]) / f"{library_type}_metadata.yml"
+        
+        if output_path.exists():
+            try:
+                with open(output_path, "r", encoding="utf-8") as f:
+                    yaml = YAML()
+                    existing_yaml_data = yaml.load(f) or {}
+            except Exception as e:
+                log_processing_event("processing_failed_parse_yaml", output_path=output_path, error=str(e))
 
-        if library_item_counts is not None:
-            library_item_counts[library_name] = 0
-        if library_filesize is not None:
-            library_filesize[library_name] = 0
-
+        consolidated_metadata = existing_yaml_data if existing_yaml_data else {"metadata": {}}
+        existing_assets = set()
+    
         all_stats = []
         async def process_and_collect(item):
             stats = await process_item(
