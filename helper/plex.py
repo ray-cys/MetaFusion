@@ -378,6 +378,7 @@ async def get_plex_metadata(item, _season_cache=None, _episode_cache=None, _movi
         log_plex_event("plex_missing_ids", title=title, year=year, missing_ids=", ".join(missing_ids), found_ids=", ".join(found_ids) if found_ids else "None")
 
     movie_path = None
+    movie_dir = None
     if library_type == "movie" or hasattr(item, "iterParts"):
         try:
             if item_key in _movie_cache:
@@ -388,10 +389,12 @@ async def get_plex_metadata(item, _season_cache=None, _episode_cache=None, _movi
             if parts:
                 file_path = parts[0].file
                 movie_path = Path(file_path).parent.name
+                movie_dir = str(Path(file_path).parent)
         except Exception as e:
             log_plex_event("plex_failed_extract_movie_path", title=title, year=year, error=e)
 
     show_path = None
+    show_dir = None
     if library_type in ("show", "tv") or hasattr(item, "episodes"):
         try:
             if item_key in _episode_cache:
@@ -405,6 +408,7 @@ async def get_plex_metadata(item, _season_cache=None, _episode_cache=None, _movi
                     for part in getattr(media, 'parts', []):
                         file_path = Path(part.file)
                         show_path = file_path.parent.parent.name
+                        show_dir = str(file_path.parent.parent)
                         found = True
                         break
                     if found:

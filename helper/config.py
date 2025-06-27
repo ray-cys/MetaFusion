@@ -6,7 +6,7 @@ from helper.logging import log_config_event
 CONFIG_DIR = Path(
     os.environ.get(
         "CONFIG_DIR",
-        "/config/config.yml" if os.path.exists("/config") else str(Path(__file__).parent.parent / "config.yml")
+        str(Path(__file__).parent.parent / "config.yml")
     )
 )
 

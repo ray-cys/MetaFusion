@@ -6,7 +6,7 @@ from helper.logging import log_cache_event
 CACHE_PATH = Path(
     os.environ.get(
         "CACHE_PATH",
-        "/config/cache" if os.path.exists("/config") else str(Path(__file__).parent.parent / "cache")
+        str(Path(__file__).parent.parent / "cache")
     )
 )
 CACHE_PATH.mkdir(exist_ok=True)
