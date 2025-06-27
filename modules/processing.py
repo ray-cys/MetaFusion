@@ -56,10 +56,10 @@ async def process_library(
 ):
     global plex_metadata_dict
     plex_metadata_dict.clear()
+    
     library_name = library_section.title
     if ignored_fields is None:
         ignored_fields = {"collection", "guest"}
-    output_path = Path(config["metadata"]["directory"]) / f"{library_name.lower().replace(' ', '_')}.yml"
     existing_yaml_data = {}
     
     if output_path.exists():
@@ -98,6 +98,15 @@ async def process_library(
                 media_type = "tv"
             key = (meta.get("title"), meta.get("year"), media_type)
             plex_metadata_dict[key] = meta
+
+    if plex_metadata_dict:
+        first_meta = next(iter(plex_metadata_dict.values()))
+        library_type = first_meta.get("library_type", "unknown").lower()
+        if library_type == "show":
+            library_type = "tv"
+    else:
+        library_type = "unknown"
+    output_path = Path(config["metadata"]["directory"]) / f"{library_type}_metadata.yml"
 
         if library_item_counts is not None:
             library_item_counts[library_name] = 0
