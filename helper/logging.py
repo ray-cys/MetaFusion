@@ -268,6 +268,10 @@ def log_plex_event(event, logger=None, **kwargs):
         "plex_failed_extract_movie_path": "[Plex] Failed to extract movie directory for {title} ({year}): {error}",
         "plex_failed_extract_show_path": "[Plex] Failed to extract show directory for {title} ({year}): {error}",
         "plex_failed_extract_seasons_episodes": "[Plex] Failed to extract seasons/episodes for {title} ({year}): {error}",
+        "plex_failed_extract_directors": "[Plex] Failed to extract directors for {title} ({year}): {error}",
+        "plex_failed_extract_writers": "[Plex] Failed to extract writers for {title} ({year}): {error}",
+        "plex_failed_extract_producers": "[Plex] Failed to extract producers for {title} ({year}): {error}",
+        "plex_failed_extract_roles": "[Plex] Failed to extract roles for {title} ({year}): {error}",
         "plex_critical_metadata_missing": "[Plex] Critical metadata missing for item [ratingKey={item_key}]: {missing_critical}. Extracted: {result}",
     }
     levels = {
@@ -284,6 +288,10 @@ def log_plex_event(event, logger=None, **kwargs):
         "plex_failed_extract_movie_path": "warning",
         "plex_failed_extract_show_path": "warning",
         "plex_failed_extract_seasons_episodes": "warning",
+        "plex_failed_extract_directors": "warning",
+        "plex_failed_extract_writers": "warning",
+        "plex_failed_extract_producers": "warning",
+        "plex_failed_extract_roles": "warning",
         "plex_critical_metadata_missing": "warning",
     }
     msg = messages.get(event, "[Plex] Unknown event")

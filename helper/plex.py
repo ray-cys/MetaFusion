@@ -440,6 +440,33 @@ async def get_plex_metadata(item, _season_cache=None, _episode_cache=None, _movi
         except Exception as e:
             log_plex_event("plex_failed_extract_seasons_episodes", title=title, year=year, error=e)
 
+    directors = []
+    try:
+        directors = [getattr(d, "tag", None) for d in getattr(item, "directors", []) if getattr(d, "tag", None)]
+    except Exception as e:
+        log_plex_event("plex_failed_extract_directors", title=title, year=year, error=e)
+
+    writers = []
+    try:
+        writers = [getattr(w, "tag", None) for w in getattr(item, "writers", []) if getattr(w, "tag", None)]
+    except Exception as e:
+        log_plex_event("plex_failed_extract_writers", title=title, year=year, error=e)
+
+    producers = []
+    try:
+        producers = [getattr(p, "tag", None) for p in getattr(item, "producers", []) if getattr(p, "tag", None)]
+    except Exception as e:
+        log_plex_event("plex_failed_extract_producers", title=title, year=year, error=e)
+
+    roles = []
+    try:
+        roles = [
+            {"name": getattr(r, "tag", None), "role": getattr(r, "role", None)}
+            for r in getattr(item, "roles", []) if getattr(r, "tag", None)
+        ]
+    except Exception as e:
+        log_plex_event("plex_failed_extract_roles", title=title, year=year, error=e)
+        
     result = {
         "library_name": library_name,
         "library_type": library_type,
@@ -453,6 +480,10 @@ async def get_plex_metadata(item, _season_cache=None, _episode_cache=None, _movi
         "movie_path": movie_path,
         "show_path": show_path,
         "seasons_episodes": seasons_episodes,
+        "directors": directors,
+        "writers": writers,
+        "producers": producers,
+        "roles": roles,
     }
     critical_fields = ["title", "year", "tmdb_id"]
     if library_type in ("movie",):
