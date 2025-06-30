@@ -31,7 +31,7 @@ tmdb:
 
 # Metadata and asset processing options
 metadata:
-  directory: "/path/to/metadata/"
+  path: "/path/to/metadata/"
   run_basic: true
   run_enhanced: true
 
