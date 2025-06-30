@@ -1,6 +1,5 @@
-import asyncio
+import asyncio, yaml
 from pathlib import Path
-from ruamel.yaml import YAML
 from helper.logging import log_processing_event, log_library_summary
 from helper.cache import save_cache, load_cache
 from helper.plex import get_plex_metadata
@@ -73,6 +72,10 @@ async def process_library(
     total_asset_size = 0
     completed = 0
     incomplete = 0
+    meta_downloaded = meta_upgraded = meta_skipped = 0
+    poster_downloaded = poster_upgraded = poster_skipped = 0
+    background_downloaded = background_upgraded = background_skipped = 0
+    season_poster_downloaded = season_poster_upgraded = season_poster_skipped = 0
     
     try:
         library_name = library_section.title
@@ -93,20 +96,26 @@ async def process_library(
             key = (meta.get("title"), meta.get("year"), media_type)
             plex_metadata_dict[key] = meta
 
-        if plex_metadata_dict:
-            first_meta = next(iter(plex_metadata_dict.values()))
-            library_type = first_meta.get("library_type", "unknown").lower()
-            if library_type == "show":
+        library_type = getattr(library_section, "type", None)
+        if library_type is not None:
+            library_type = library_type.lower()
+            if library_type == "movies":
+                library_type = "movie"
+            elif library_type in ("show", "shows"):
                 library_type = "tv"
         else:
-            library_type = "unknown"
-        output_path = Path(config["metadata"]["directory"]) / f"{library_type}_metadata.yml"
+            if "movies" in library_name.lower():
+                library_type = "movie"
+            elif "tv shows" in library_name.lower() or "show" in library_name.lower():
+                library_type = "tv"
+            else:
+                library_type = "unknown"
+        output_path = Path(config["metadata"]["path"]) / f"{library_type}_metadata.yml"
         
         if output_path.exists():
             try:
                 with open(output_path, "r", encoding="utf-8") as f:
-                    yaml = YAML()
-                    existing_yaml_data = yaml.load(f) or {}
+                    existing_yaml_data = yaml.safe_load(f) or {}
             except Exception as e:
                 log_processing_event("processing_failed_parse_yaml", output_path=output_path, error=str(e))
 
@@ -123,6 +132,48 @@ async def process_library(
             )
             if stats and isinstance(stats, dict):
                 all_stats.append(stats)
+                action = stats.get("metadata_action")
+                if action == "downloaded":
+                    nonlocal meta_downloaded
+                    meta_downloaded += 1
+                elif action == "upgraded":
+                    nonlocal meta_upgraded
+                    meta_upgraded += 1
+                elif action == "skipped":
+                    nonlocal meta_skipped
+                    meta_skipped += 1
+                action = stats.get("poster_action")
+                if action == "downloaded":
+                    nonlocal poster_downloaded
+                    poster_downloaded += 1
+                elif action == "upgraded":
+                    nonlocal poster_upgraded
+                    poster_upgraded += 1
+                elif action == "skipped":
+                    nonlocal poster_skipped
+                    poster_skipped += 1
+                action = stats.get("background_action")
+                if action == "downloaded":
+                    nonlocal background_downloaded
+                    background_downloaded += 1
+                elif action == "upgraded":
+                    nonlocal background_upgraded
+                    background_upgraded += 1
+                elif action == "skipped":
+                    nonlocal background_skipped
+                    background_skipped += 1
+                season_actions = stats.get("season_poster_actions", {})
+                for season_action in season_actions.values():
+                    if season_action == "downloaded":
+                        nonlocal season_poster_downloaded
+                        season_poster_downloaded += 1
+                    elif season_action == "upgraded":
+                        nonlocal season_poster_upgraded
+                        season_poster_upgraded += 1
+                    elif season_action == "skipped":
+                        nonlocal season_poster_skipped
+                        season_poster_skipped += 1
+
                 if feature_flags["poster"]:
                     nonlocal poster_size
                     poster_size += stats.get("poster", {}).get("size", 0)
@@ -160,14 +211,10 @@ async def process_library(
             try:
                 output_path.parent.mkdir(parents=True, exist_ok=True)
                 with open(output_path, "w", encoding="utf-8") as f:
-                    yaml = YAML()
-                    yaml.default_flow_style = False
-                    yaml.allow_unicode = True
-                    yaml.dump(consolidated_metadata, f)
+                    yaml.dump(consolidated_metadata, f, allow_unicode=True, default_flow_style=False)
                 log_processing_event("processing_metadata_saved", output_path=output_path)
                 save_cache(load_cache())
                 log_processing_event("processing_cache_saved")
-
             except Exception as e:
                 log_processing_event("processing_failed_write_metadata", error=str(e))
         else:
@@ -176,19 +223,29 @@ async def process_library(
         run_metadata = feature_flags["metadata_basic"] or feature_flags["metadata_enhanced"]
         percent_complete = round((completed / total_items) * 100, 2) if total_items else 0.0
 
+        library_summary = {
+            "meta_downloaded": meta_downloaded, "meta_upgraded": meta_upgraded, "meta_skipped": meta_skipped,
+            "poster_downloaded": poster_downloaded, "poster_upgraded": poster_upgraded, "poster_skipped": poster_skipped,
+            "background_downloaded": background_downloaded, "background_upgraded": background_upgraded, "background_skipped": background_skipped,
+            "season_poster_downloaded": season_poster_downloaded, "season_poster_upgraded": season_poster_upgraded, "season_poster_skipped": season_poster_skipped,
+        }
+
         log_library_summary(
             library_name=library_name, completed=completed, incomplete=incomplete, total_items=total_items,
             percent_complete=percent_complete, poster_size=poster_size, background_size=background_size,
             season_poster_size=season_poster_size, library_filesize=library_filesize,
-            run_metadata=run_metadata
+            run_metadata=run_metadata, library_summary=library_summary, library_type=library_type,
+            feature_flags=feature_flags
         )
 
         if metadata_summaries is not None:
-            metadata_summaries[library_name] = {
+            metadata_summaries[library_name] = { 
                 "complete": completed,
                 "incomplete": incomplete,
                 "total_items": total_items,
                 "percent_complete": percent_complete if run_metadata else None,
+                "library_summary": library_summary,
+                "library_type": library_type,
             }
         
         return all_stats

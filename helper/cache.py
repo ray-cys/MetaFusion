@@ -1,4 +1,4 @@
-import asyncio, orjson
+import asyncio, json
 from datetime import datetime
 from pathlib import Path
 from helper.logging import log_cache_event
@@ -9,16 +9,16 @@ CACHE_FILE = CACHE_PATH / "meta_cache.json"
 
 def load_cache():
     if CACHE_FILE.exists() and CACHE_FILE.stat().st_size > 0:
-        with open(CACHE_FILE, "rb") as f:
-            cache = orjson.loads(f.read())
+        with open(CACHE_FILE, "r", encoding="utf-8") as f:
+            cache = json.load(f)
             log_cache_event("cache_loaded", count=len(cache), cache_file=CACHE_FILE)
             return cache
     log_cache_event("cache_empty", cache_file=CACHE_FILE)
     return {}
 
 def save_cache(cache):
-    with open(CACHE_FILE, "wb") as f:
-        f.write(orjson.dumps(cache, option=orjson.OPT_INDENT_2))
+    with open(CACHE_FILE, "w", encoding="utf-8") as f:
+        json.dump(cache, f, indent=2, ensure_ascii=False)
     log_cache_event("cache_saved", count=len(cache), cache_file=CACHE_FILE)
 
 cache_lock = asyncio.Lock()

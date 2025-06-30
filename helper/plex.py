@@ -349,6 +349,8 @@ async def get_plex_metadata(item, _season_cache=None, _episode_cache=None, _movi
         library_section = getattr(item, "librarySection", None)
         library_name = getattr(library_section, "title", None) or "Unknown"
         library_type = (getattr(library_section, "type", None) or getattr(item, "type", None) or "unknown").lower()
+        if library_type == "movies":
+            library_type = "movie"
         if library_type == "show":
             library_type = "tv"
     except Exception as e:

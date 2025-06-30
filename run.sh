@@ -1,34 +1,25 @@
 #!/bin/bash
 
-# Run MetaFusion script in the Kometa container
 echo "[KOMETA SCRIPT] Starting MetaFusion script..."
 docker exec kometa python /config/scripts/MetaFusion/metafusion.py
 echo "[KOMETA SCRIPT] MetaFusion script completed."
 
-# Extract the MetaFusion summary report from the log
-SUMMARY=$(awk '/^=+$/ {p = !p; s = ""} p {s = s $0 ORS} END {print s}' /mnt/user/appdata/kometa/scripts/MetaFusion/logs/metafusion.log)
+LOGFILE="/mnt/user/appdata/kometa/scripts/MetaFusion/logs/metafusion.log"
+
+# Extract the METAFUSION SUMMARY REPORT block 
+SUMMARY=$(awk '
+  /METAFUSION SUMMARY REPORT/ {inbox=1}
+  inbox && /^=+$/ {if (!start) {start=1}; print; next}
+  start && /^=+$/ {print; exit}
+  start {print}
+' "$LOGFILE")
 
 # Remove timestamps and log level
-SUMMARY=$(echo "$SUMMARY" | sed 's/^[0-9\-:, ]\{23,\} - [A-Z]\{4,5\} - //')
+SUMMARY=$(echo "$SUMMARY" | sed -E 's/^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2},[0-9]{3} - [A-Z]+ - //')
 
-# Rebox for mobile: set width to 50
-MOBILE_WIDTH=50
-BORDER=$(printf '=%.0s' $(seq 1 $MOBILE_WIDTH))
-
-# Replace old borders with new width and wrap lines
-SUMMARY=$(echo "$SUMMARY" | \
-    sed "s/^=\\{80\\}\$/$BORDER/" | \
-    sed "s/^=\\{79\\}\$/$BORDER/" | \
-    fold -s -w $MOBILE_WIDTH)
-
-# If summary is empty, fallback to last 11 lines
-if [ -z "$SUMMARY" ]; then
-  SUMMARY=$(tail -n 11 /mnt/user/appdata/kometa/scripts/MetaFusion/logs/metafusion.log | sed 's/^[0-9\-:, ]\{23,\} - [A-Z]\{4,5\} - //')
-  SUMMARY=$(echo "$SUMMARY" | fold -s -w $MOBILE_WIDTH)
-fi
-
-# Send the summary report via email
+# Output or email the summary as needed
+# echo "$SUMMARY"
 /usr/local/emhttp/webGui/scripts/notify -s "MetaFusion Summary Report" \
-  -d "Libraries Processing Completed" -m "$SUMMARY"
+   -d "Libraries Processing Completed" -m "$SUMMARY"
 
-echo "[KOMETA SCRIPT] MetaFusion summary report emailed."
+echo "[KOMETA SCRIPT] MetaFusion summary report extracted."

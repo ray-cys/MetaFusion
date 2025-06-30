@@ -12,6 +12,9 @@ async def build_movie(
     config, consolidated_metadata, feature_flags=None, existing_yaml_data=None, session=None, ignored_fields=None,
     existing_assets=None, library_name=None, meta=None, 
 ):
+    metadata_action = "skipped"
+    poster_action = "skipped"
+    background_action = "skipped"
     result = {
         "poster": {"size": 0},
         "background": {"size": 0},
@@ -28,6 +31,7 @@ async def build_movie(
     cache_key = f"movie:{title}:{year}"
     movie_path = meta.get("movie_path") if meta else None
     tmdb_id = meta.get("tmdb_id") if meta else None
+    library_type = meta.get("library_type", "movie") if meta else "movie"
     full_title = f"{title} ({year})"
     imdb_id_for_mapping = ""
     mapping_id = ""
@@ -160,6 +164,7 @@ async def build_movie(
         changes = smart_meta_update(existing_metadata, new_metadata)
         if not changes:
             log_builder_event("builder_no_metadata_changes", media_type="Movie", full_title=full_title, percent=percent)
+            metadata_action = "skipped"
         else:
             consolidated_metadata["metadata"][full_title] = {
                 "match": {
@@ -170,6 +175,11 @@ async def build_movie(
                 **new_metadata
             }
             metadata_changed = True
+            log_builder_event(
+                "build_metadata_changed", media_type="Movie", full_title=full_title, 
+                percent=percent, tmdb_id=tmdb_id, changes=changes
+            )
+            metadata_action = "upgraded"
     else:
         consolidated_metadata["metadata"][full_title] = {
             "match": {
@@ -179,9 +189,12 @@ async def build_movie(
             },
             **new_metadata
         }
-        log_builder_event("builder_no_existing_metadata", media_type="Movie", full_title=full_title, tmdb_id=tmdb_id)
         metadata_changed = True
         changes = list(new_metadata.keys())
+        log_builder_event(
+            "builder_no_existing_metadata", media_type="Movie", full_title=full_title, tmdb_id=tmdb_id
+        )
+        metadata_action = "downloaded" 
     
     if feature_flags.get("dry_run", False):
         log_builder_event("builder_dry_run_metadata", media_type="Movie", full_title=full_title)
@@ -189,13 +202,12 @@ async def build_movie(
     if metadata_changed:
         cache_key = f"movie:{title}:{year}"
         await meta_cache_async(cache_key, tmdb_id, title, year, "movie", collection_id=collection_id)
-        log_builder_event(
-            "builder_metadata_upgraded", media_type="Movie", full_title=full_title, 
-            percent=percent, tmdb_id=tmdb_id, changes=changes
-        )
+        log_builder_event("builder_metadata_cached", media_type="Movie", full_title=full_title, cache_key=cache_key)
+
 
     async def process_poster():
         poster_size = 0
+        nonlocal poster_action
         if not feature_flags or not feature_flags.get("poster", True):
             result["poster"]["size"] = poster_size
             return
@@ -207,6 +219,7 @@ async def build_movie(
         if feature_flags.get("dry_run", False):
             log_builder_event("builder_dry_run_asset", media_type="Movie", asset_type="poster", full_title=full_title)
             result["poster"]["size"] = poster_size
+            poster_action = "skipped"
             return
         
         preferred_language = config["tmdb"].get("language", "en").split("-")[0]
@@ -216,15 +229,17 @@ async def build_movie(
         if not best:
             log_builder_event("builder_no_suitable_asset", media_type="Movie", asset_type="poster", full_title=full_title, extra="")
             result["poster"]["size"] = poster_size
+            poster_action = "skipped"
             return   
 
         asset_path = get_asset_path(config, meta, asset_type="poster")
         if asset_path is None:
             log_builder_event("builder_no_asset_path", media_type="Movie", full_title=full_title, asset_type="poster", extra="")
             result["poster"]["size"] = poster_size
+            poster_action = "skipped"
             return
 
-        temp_path = asset_temp_path(config, library_name)
+        temp_path = asset_temp_path(config, library_type)
         try:
             success, url, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
             if not success:
@@ -248,11 +263,13 @@ async def build_movie(
                             "builder_downloading_asset", media_type="Movie", asset_type="poster",
                             full_title=full_title, filesize=poster_size
                         )
+                        poster_action = "downloaded"
                     else:
                         log_builder_event(
                             "builder_asset_upgraded", media_type="Movie", asset_type="Poster",
                             full_title=full_title, status_code=status_code, context=context, filesize=poster_size
                         )
+                        poster_action = "upgraded"
                     existing_assets.add(str(asset_path.resolve()))
                 else:
                     poster_size = asset_path.stat().st_size if asset_path.exists() else 0
@@ -260,6 +277,7 @@ async def build_movie(
                         status_code, media_type="Movie", asset_type="poster", full_title=full_title,
                         filesize=poster_size, error=context.get("error") if context else None, extra="", season_number=None
                     )
+                    poster_action = "skipped"
                     if asset_path.exists():
                         existing_assets.add(str(asset_path.resolve()))
         finally:
@@ -269,6 +287,7 @@ async def build_movie(
 
     async def process_background():
         background_size = 0
+        nonlocal background_action
         if not feature_flags or not feature_flags.get("background", True):
             result["background"]["size"] = background_size
             return
@@ -280,6 +299,7 @@ async def build_movie(
         if feature_flags.get("dry_run", False):
             log_builder_event("builder_dry_run_asset", media_type="Movie", asset_type="background", full_title=full_title)
             result["background"]["size"] = background_size
+            background_action = "skipped"
             return
     
         preferred_language = config["tmdb"].get("language", "en").split("-")[0]
@@ -289,15 +309,17 @@ async def build_movie(
         if not best:
             log_builder_event("builder_no_suitable_asset", media_type="Movie", asset_type="background", full_title=full_title, extra="")
             result["background"]["size"] = background_size
+            background_action = "skipped"
             return
 
         asset_path = get_asset_path(config, meta, asset_type="background")
         if asset_path is None:
             log_builder_event("builder_no_asset_path", media_type="Movie", full_title=full_title, asset_type="background", extra="")
             result["background"]["size"] = background_size
+            background_action = "skipped"
             return
 
-        temp_path = asset_temp_path(config, library_name)
+        temp_path = asset_temp_path(config, library_type)
         try:
             success, url, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
             if not success:
@@ -321,11 +343,13 @@ async def build_movie(
                             "builder_downloading_asset", media_type="Movie", asset_type="background",
                             full_title=full_title, filesize=background_size
                         )
+                        background_action = "downloaded"
                     else:
                         log_builder_event(
                         "builder_asset_upgraded", media_type="Movie", asset_type="Background",
                         full_title=full_title, status_code=status_code, context=context, filesize=background_size
-                    )
+                        )
+                        background_action = "upgraded"
                     existing_assets.add(str(asset_path.resolve()))
                 else:
                     background_size = asset_path.stat().st_size if asset_path.exists() else 0
@@ -333,6 +357,7 @@ async def build_movie(
                         status_code, media_type="Movie", asset_type="background", full_title=full_title,
                         filesize=background_size, error=context.get("error") if context else None, extra="", season_number=None
                     )
+                    background_action = "skipped"
                     if asset_path.exists():
                         existing_assets.add(str(asset_path.resolve()))
         finally:
@@ -347,6 +372,9 @@ async def build_movie(
     
     return {
         "percent": percent,
+        "metadata_action": metadata_action,
+        "poster_action": poster_action,
+        "background_action": background_action,
         **result
     }
 
@@ -354,6 +382,10 @@ async def build_tv(
     config, consolidated_metadata, feature_flags=None, existing_yaml_data=None, session=None, ignored_fields=None,
     existing_assets=None, library_name=None, meta=None, 
 ):
+    metadata_action = "skipped"
+    poster_action = "skipped"
+    background_action = "skipped"
+    season_poster_actions = {}
     result = {
         "poster": {"size": 0},
         "background": {"size": 0},
@@ -368,11 +400,12 @@ async def build_tv(
         existing_assets = set()
     title = meta.get("title", "Unknown") if meta else None
     year = meta.get("year", "Unknown") if meta else None
-    cache_key = f"tv:{title}:{year}"
-    full_title = f"{title} ({year})"
     tmdb_id = meta.get("tmdb_id") if meta else None
     show_path = meta.get("show_path") if meta else None
     seasons_episodes = meta.get("seasons_episodes") if meta else None
+    library_type = meta.get("library_type", "tv") if meta else "tv"
+    cache_key = f"tv:{title}:{year}"
+    full_title = f"{title} ({year})"
 
     if not tmdb_id:
         search_results = await tmdb_api_request(
@@ -589,14 +622,23 @@ async def build_tv(
         changes = smart_meta_update(existing_metadata, {**new_metadata, "seasons": seasons_data})
         if not changes:
             log_builder_event("builder_no_metadata_changes", media_type="TV Show", full_title=full_title, percent=grand_percent)
+            metadata_action = "skipped"
         else:
             consolidated_metadata["metadata"][full_title] = metadata_entry
             metadata_changed = True
+            log_builder_event(
+                "build_metadata_changed", media_type="TV Show",
+                full_title=full_title, percent=grand_percent, tmdb_id=tmdb_id, changes=changes
+            )
+            metadata_action = "upgraded"
     else:
         consolidated_metadata["metadata"][full_title] = metadata_entry
-        log_builder_event("builder_no_existing_metadata", media_type="TV Show", full_title=full_title, tmdb_id=tmdb_id)
         metadata_changed = True
         changes = list(metadata_entry.keys())
+        log_builder_event(
+            "builder_no_existing_metadata", media_type="TV Show", full_title=full_title, tmdb_id=tmdb_id
+        )
+        metadata_action = "downloaded"
     
     if feature_flags.get("dry_run", False):
         log_builder_event("builder_dry_run_metadata", media_type="TV Show", full_title=full_title)
@@ -604,24 +646,24 @@ async def build_tv(
     if metadata_changed:
         cache_key = f"tv:{title}:{year}"
         await meta_cache_async(cache_key, tmdb_id_int, title, year, "tv")
-        log_builder_event(
-            "builder_metadata_upgraded", media_type="TV Show",
-            full_title=full_title, percent=grand_percent, tmdb_id=tmdb_id, changes=changes
-        )
+        log_builder_event("builder_metadata_cached", media_type="TV Show", full_title=full_title, cache_key=cache_key)
 
     async def process_tv_poster():
         poster_size = 0
+        nonlocal poster_action
         if not feature_flags or not feature_flags.get("poster", True):
             result["poster"]["size"] = poster_size
             return
         if not show_path:
             log_builder_event("builder_no_asset_path", media_type="TV Show", full_title=full_title, asset_type="poster", extra="")
             result["poster"]["size"] = poster_size
+            poster_action = "skipped"
             return
 
         if feature_flags.get("dry_run", False):
             log_builder_event("builder_dry_run_asset", media_type="TV Show", asset_type="poster", full_title=full_title)
             result["poster"]["size"] = poster_size
+            poster_action = "skipped"
             return
             
         preferred_language = config["tmdb"].get("language", "en").split("-")[0]
@@ -639,7 +681,7 @@ async def build_tv(
             result["poster"]["size"] = poster_size
             return
 
-        temp_path = asset_temp_path(config, library_name)
+        temp_path = asset_temp_path(config, library_type)
         try:
             success, url, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
             if not success:
@@ -664,11 +706,13 @@ async def build_tv(
                             "builder_downloading_asset", media_type="TV Show", asset_type="poster",
                             full_title=full_title, filesize=poster_size
                         )
+                        poster_action = "downloaded"
                     else:
                         log_builder_event(
                             "builder_asset_upgraded", media_type="TV Show", asset_type="Poster",
                             full_title=full_title, status_code=status_code, context=context, filesize=poster_size
                         )
+                        poster_action = "upgraded"
                     existing_assets.add(str(asset_path.resolve()))
                 else:
                     poster_size = asset_path.stat().st_size if asset_path.exists() else 0
@@ -676,6 +720,7 @@ async def build_tv(
                         status_code, media_type="TV Show", asset_type="poster", full_title=full_title,
                         filesize=poster_size, error=context.get("error") if context else None, extra="", season_number=None
                     )
+                    poster_action = "skipped"
                     if asset_path.exists():
                         existing_assets.add(str(asset_path.resolve()))
         finally:
@@ -685,17 +730,21 @@ async def build_tv(
 
     async def process_tv_background():
         background_size = 0
+        nonlocal background_action
         if not config["assets"].get("run_background", True):
             result["background"]["size"] = background_size
+            background_action = "skipped"
             return
         if not show_path:
             log_builder_event("builder_no_asset_path", media_type="TV Show", full_title=full_title, asset_type="background", extra="")
             result["background"]["size"] = background_size
+            background_action = "skipped"
             return
 
         if feature_flags.get("dry_run", False):
             log_builder_event("builder_dry_run_asset", media_type="TV Show", asset_type="background", full_title=full_title)
             result["background"]["size"] = background_size
+            background_action = "skipped"
             return
             
         images = get_meta_field(details, "backdrops", [], path=["images"])
@@ -705,6 +754,7 @@ async def build_tv(
         if not best:
             log_builder_event("builder_no_suitable_asset", media_type="TV Show", asset_type="background", full_title=full_title, extra="")
             result["background"]["size"] = background_size
+            background_action = "skipped"
             return
     
         asset_path = get_asset_path(config, meta, asset_type="background")
@@ -713,7 +763,7 @@ async def build_tv(
             result["background"]["size"] = background_size
             return
     
-        temp_path = asset_temp_path(config, library_name)
+        temp_path = asset_temp_path(config, library_type)
         try:
             success, url, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
             if not success:
@@ -738,11 +788,13 @@ async def build_tv(
                             "builder_downloading_asset", media_type="TV Show", asset_type="background",
                             full_title=full_title, filesize=background_size
                         )
+                        background_action = "downloaded"
                     else:
                         log_builder_event(
                             "builder_asset_upgraded", media_type="TV Show", asset_type="Background",
                             full_title=full_title, status_code=status_code, context=context, filesize=background_size
                         )
+                        background_action = "upgraded"
                     existing_assets.add(str(asset_path.resolve()))
                 else:
                     background_size = asset_path.stat().st_size if asset_path.exists() else 0
@@ -750,6 +802,7 @@ async def build_tv(
                         status_code, media_type="TV Show", asset_type="background", full_title=full_title,
                         filesize=background_size, error=context.get("error") if context else None, extra="", season_number=None
                     )
+                    background_action = "skipped"
                     if asset_path.exists():
                         existing_assets.add(str(asset_path.resolve()))
         finally:
@@ -760,6 +813,8 @@ async def build_tv(
     async def process_season_poster(season_info):
         season_poster_size = 0
         season_number = season_info.get("season_number")
+        nonlocal season_poster_actions
+        season_poster_actions[season_number] = "skipped"
         if not season_number or season_number == 0:
             return
         if not show_path:
@@ -769,6 +824,7 @@ async def build_tv(
         if feature_flags.get("dry_run", False):
             log_builder_event("builder_dry_run_asset_season", media_type="TV Show", season_number=season_number, asset_type="poster", full_title=full_title)
             result["season_posters"][season_number] = season_poster_size
+            season_poster_actions[season_number] = "skipped"
             return
         
         season_key = f"tv/{tmdb_id_int}/season/{season_number}"
@@ -786,14 +842,16 @@ async def build_tv(
                 "builder_no_suitable_asset_season", media_type="TV Show", asset_type="poster",
                 full_title=full_title, season_number=season_number
             )
+            season_poster_actions[season_number] = "skipped"
             return
 
         asset_path = get_asset_path(config, meta, asset_type="season", season_number=season_number)
         if asset_path is None:
             log_builder_event("builder_no_asset_path_season", media_type="TV Show", full_title=full_title, season_number=season_number)
+            season_poster_actions[season_number] = "skipped"
             return
 
-        temp_path = asset_temp_path(config, library_name)
+        temp_path = asset_temp_path(config, library_type)
         try:
             success, url, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
             if not success:
@@ -821,12 +879,14 @@ async def build_tv(
                             "builder_downloading_asset_season", media_type="TV Show", asset_type="poster",
                             full_title=full_title, season_number=season_number, filesize=season_poster_size
                         )
+                        season_poster_actions[season_number] = "downloaded"
                     else:
                         log_builder_event(
                             "builder_asset_upgraded_season", media_type="TV Show", asset_type="poster",
                             full_title=full_title, season_number=season_number, status_code=status_code, context=context,
                             filesize=season_poster_size
                         )
+                        season_poster_actions[season_number] = "upgraded" 
                     existing_assets.add(str(asset_path.resolve()))
                 else:
                     season_poster_size = asset_path.stat().st_size if asset_path.exists() else 0
@@ -840,6 +900,7 @@ async def build_tv(
                         season_status_code, media_type="TV Show", asset_type="poster", full_title=full_title,
                         filesize=season_poster_size, error=context.get("error") if context else None, extra="", season_number=season_number
                     )
+                    season_poster_actions[season_number] = "skipped"
                     if asset_path.exists():
                         existing_assets.add(str(asset_path.resolve()))
         finally:
@@ -861,5 +922,9 @@ async def build_tv(
     
     return {
         "percent": grand_percent,
+        "metadata_action": metadata_action,
+        "poster_action": poster_action,
+        "background_action": background_action,
+        "season_poster_actions": season_poster_actions,
         **result
     }

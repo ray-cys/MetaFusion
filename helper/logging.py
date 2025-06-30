@@ -183,17 +183,17 @@ def log_main_event(event, logger=None, **kwargs):
 def log_config_event(event, logger=None, **kwargs):
     logger = kwargs.get("logger") or logging.getLogger()
     messages = {
-        "feature_disabled": "[Config] {feature} is DISABLED and will not run.",
-        "feature_enabled": "[Config] {feature} is ENABLED and will run.",
-        "unknown_feature": "[Config] Unknown configuration settings: {feature}",
-        "unknown_key": "[Config] Unknown config key in config.yml: {key}",
-        "yaml_not_found": "[Config] YAML not found at {config_file}. Copying template to {config_file}. Review and edit configuration.",
-        "yaml_missing": "[Config] YAMLs not found at {config_file}. Using default configuration.",
-        "yaml_parse_error": "[Config] Failed to parse YAML at {config_file}. Using default configuration.",
-        "config_missing": "[Config] Config file {config_file} does not exist. Using default configuration.",
-        "env_override_invalid": "[Config] Invalid environment override for {env_key}: '{env_val}' (expected {expected_type}). Keeping previous value: {old_val}",
-        "env_override": "[Config] Environment override: {env_key}={env_val} (was {old_val})",
-        "config_loaded": "[Config] Successfully loaded configuration from {config_file}.",
+        "feature_disabled": "[Configuration] {feature} is DISABLED and will not run.",
+        "feature_enabled": "[Configuration] {feature} is ENABLED and will run.",
+        "unknown_feature": "[Configuration] Unknown configuration settings: {feature}",
+        "unknown_key": "[Configuration] Unknown config key in config.yml: {key}",
+        "yaml_not_found": "[Configuration] YAML not found at {config_file}. Copying template to {config_file}. Review and edit configuration.",
+        "yaml_missing": "[Configuration] YAMLs not found at {config_file}. Using default configuration.",
+        "yaml_parse_error": "[Configuration] Failed to parse YAML at {config_file}. Using default configuration.",
+        "config_missing": "[Configuration] Config file {config_file} does not exist. Using default configuration.",
+        "env_override_invalid": "[Configuration] Invalid environment override for {env_key}: '{env_val}' (expected {expected_type}). Keeping previous value: {old_val}",
+        "env_override": "[Configuration] Environment override: {env_key}={env_val} (was {old_val})",
+        "config_loaded": "[Configuration] Successfully loaded configuration from {config_file}.",
     }
     levels = {
         "feature_disabled": "info",
@@ -396,26 +396,27 @@ def log_builder_event(event, logger=None, **kwargs):
         "builder_invalid_tmdb_id": "[{media_type}] Invalid TMDb ID format for {full_title}. Skipping...",
         "builder_no_tmdb_season_data": "[{media_type}] No TMDb data found for Season {season_number} of {full_title}. Skipping...",
         "builder_no_metadata_changes": "[{media_type}] No metadata changes needed for {full_title}, ({percent}%) completed. Skipping updates...",
-        "builder_no_existing_metadata": "[{media_type}] No existing metadata for {full_title}. Creating new entries using TMDb ID {tmdb_id}.",
-        "builder_metadata_upgraded": "[{media_type}] Metadata upgraded and cache updated for {full_title} ({percent}%) using TMDb ID {tmdb_id}. Fields changed: {changes}",
+        "build_metadata_changed": "[{media_type}] Metadata updated for {full_title} ({percent}%) using TMDb ID {tmdb_id}. Fields changed: {changes}",
+        "builder_no_existing_metadata": "[{media_type}] No existing metadata for {full_title}. Creating new entries using TMDb ID {tmdb_id}...",
         "builder_dry_run_metadata": "[Dry Run] Would build metadata for {media_type}: {full_title}",
+        "builder_metadata_cached": "[{media_type}] {full_title} cached as {cache_key}...",
         "builder_dry_run_asset": "[Dry Run] Would build {asset_type} asset for {media_type}: {full_title}",
         "builder_no_asset_path": "[{media_type}] Asset path could not be determined for {full_title}{extra}. Skipping {asset_type} download...",
-        "builder_no_suitable_asset": "[{media_type}] No suitable {asset_type} found for {full_title}{extra}.",
+        "builder_no_suitable_asset": "[{media_type}] No suitable TMDb {asset_type} found for {full_title}{extra}. Skipping...",
         "builder_downloading_asset": "[{media_type}] Downloading {asset_type} for {full_title} from TMDb. Filesize: {filesize}",
         "builder_asset_download_failed": "[{media_type}] New {asset_type} download failed for {full_title} from {url} (status: {status}) Error: {error}",
         "builder_asset_upgraded": "[{media_type}] Upgraded for {asset_type} {full_title}: {reason} Filesize: {filesize}",
-        "builder_no_upgrade_needed": "[{media_type}] No {asset_type} upgrade needed for {full_title}. Existing {filesize} image meets criteria.",
+        "builder_no_upgrade_needed": "[{media_type}] No {asset_type} upgrade needed for {full_title}. Skipping {filesize} {asset_type} download...",
         "builder_no_image_for_compare": "[{media_type}] No image provided for comparison for {full_title}{extra}. Skipping detailed check...",
         "builder_error_image_compare": "[{media_type}] Failed to read temp image for comparison for {full_title}{extra}: {error}",
         "builder_dry_run_asset_season": "[Dry Run] Would build {asset_type} asset for {media_type} Season {season_number}: {full_title}",
         "builder_no_asset_path_season": "[{media_type}] No asset path found for {full_title} Season {season_number}. Skipping season poster asset...",
         "builder_no_season_details": "[{media_type}] No season details for {full_title} Season {season_number}. Skipping season poster asset...",
-        "builder_no_suitable_asset_season": "[{media_type}] No suitable {asset_type} found for {full_title} Season {season_number}. Skipping...",
+        "builder_no_suitable_asset_season": "[{media_type}] No suitable TMDb {asset_type} found for {full_title} Season {season_number}. Skipping...",
         "builder_downloading_asset_season": "[{media_type}] Downloading {asset_type} for {full_title} Season {season_number} from TMDb. Filesize: {filesize}",
         "builder_asset_download_failed_season": "[{media_type}] {asset_type} download failed for {full_title} Season {season_number} from {url} (status: {status}) Error: {error}",
         "builder_asset_upgraded_season": "[{media_type}] Upgraded for {asset_type} {full_title} Season {season_number}: {reason} Filesize: {filesize}",
-        "builder_no_upgrade_needed_season": "[{media_type}] No {asset_type} upgrade needed for {full_title} Season {season_number}. Existing {filesize} image meets criteria.",
+        "builder_no_upgrade_needed_season": "[{media_type}] No {asset_type} upgrade needed for {full_title} Season {season_number}. Skipping {filesize} {asset_type} download...",
         "builder_no_image_for_compare_season": "[{media_type}] No image provided for comparison for {full_title} Season {season_number}. Skipping detailed check...",
         "builder_error_image_compare_season": "[{media_type}] Failed to read temp image for comparison for {full_title} Season {season_number}: {error}",
     }
@@ -425,8 +426,9 @@ def log_builder_event(event, logger=None, **kwargs):
         "builder_no_tmdb_season_data": "warning",
         "builder_no_metadata_changes": "info",
         "builder_no_existing_metadata": "info",
-        "builder_metadata_upgraded": "info",
+        "build_metadata_changed": "info",
         "builder_dry_run_metadata": "info",
+        "builder_metadata_cached": "debug",
         "builder_dry_run_asset": "info",
         "builder_no_asset_path": "error",
         "builder_no_suitable_asset": "info",
@@ -598,8 +600,65 @@ def log_library_summary(
     library_name, completed, incomplete, total_items, percent_complete,
     poster_size=0, background_size=0, season_poster_size=0,
     feature_flags=None, library_filesize=None, run_metadata=None,
-    logger=None,
+    library_summary=None, logger=None, library_type=None
 ):
+    logger = logger or logging.getLogger()
+    box_width = 80
+    def box_line(text, width=box_width):
+        wrapped = textwrap.wrap(text, width=width - 4)
+        return [f"|| {line.ljust(width - 4)} ||" for line in wrapped]
+
+    library_type = (library_type or "unknown").strip().lower()
+    if library_type not in ("movie", "tv", "show"):
+        if "movie" in (library_name or "").lower():
+            library_type = "movie"
+        elif "tv" in (library_name or "").lower() or "show" in (library_name or "").lower():
+            library_type = "tv"
+        else:
+            library_type = "unknown"
+            
+    header = "=" * box_width
+    title = "LIBRARY PROCESSING SUMMARY"
+    lines = [
+        header,
+        f"|| {title.center(box_width - 4)} ||",
+        header,
+        f"|| {('Library: ' + library_name + ' | Items Processed: ' + str(total_items)).ljust(box_width - 4)} ||"
+    ]
+    
+    if library_summary:
+        lines.extend(box_line(
+            f"Metadata Statistics - Downloaded: {library_summary.get('meta_downloaded', 0)}, "
+            f"Upgraded: {library_summary.get('meta_upgraded', 0)}, "
+            f"Skipped: {library_summary.get('meta_skipped', 0)}", box_width))
+    if run_metadata:
+        meta_line = f"Metadata Completion - {completed}/{total_items} Completed, {incomplete} Incomplete ({percent_complete}%)"
+        lines.extend(box_line(meta_line, box_width))
+       
+    if feature_flags and feature_flags.get("poster", False) and (library_type in ("movie", "tv", "show")):
+        lines.extend(box_line(
+            f"Poster Assets - Downloaded: {library_summary.get('poster_downloaded', 0)}, "
+            f"Upgraded: {library_summary.get('poster_upgraded', 0)}, "
+            f"Skipped: {library_summary.get('poster_skipped', 0)}", box_width))
+    if feature_flags and feature_flags.get("background", False) and (library_type in ("movie", "tv", "show")):
+        lines.extend(box_line(
+            f"Background Assets - Downloaded: {library_summary.get('background_downloaded', 0)}, "
+            f"Upgraded: {library_summary.get('background_upgraded', 0)}, "
+            f"Skipped: {library_summary.get('background_skipped', 0)}", box_width))
+    if (
+        feature_flags and feature_flags.get("season", False)
+        and library_type in ("tv", "show")
+        and (
+            library_summary.get('season_poster_downloaded', 0) > 0 or
+            library_summary.get('season_poster_upgraded', 0) > 0 or
+            library_summary.get('season_poster_skipped', 0) > 0
+        )
+    ):
+        lines.extend(box_line(
+            f"Season Poster Assets - Downloaded: {library_summary.get('season_poster_downloaded', 0)}, "
+            f"Upgraded: {library_summary.get('season_poster_upgraded', 0)}, "
+            f"Skipped: {library_summary.get('season_poster_skipped', 0)}", box_width))
+        
     asset_summaries = []
     if feature_flags and feature_flags.get("poster") and poster_size > 0:
         asset_summaries.append(f"Poster: {human_readable_size(poster_size)}")
@@ -607,40 +666,21 @@ def log_library_summary(
         asset_summaries.append(f"Background: {human_readable_size(background_size)}")
     if feature_flags and feature_flags.get("season") and season_poster_size > 0:
         asset_summaries.append(f"Season: {human_readable_size(season_poster_size)}")
-    if library_filesize is not None and library_filesize.get(library_name, 0) > 0:
-        asset_summaries.append(f"Total: {human_readable_size(library_filesize[library_name])} downloaded")
-
-    logger = logger or logging.getLogger()
-    box_width = 80
-    def box_line(text, width=box_width):
-        wrapped = textwrap.wrap(text, width=width - 4)
-        return [f"|| {line.ljust(width - 4)} ||" for line in wrapped]
-
-    header = "=" * box_width
-    title = "LIBRARY PROCESSING SUMMARY"
-    lines = [
-        header,
-        f"|| {title.center(box_width - 4)} ||",
-        header,
-        f"|| {'Library: ' + library_name:<{box_width - 4}} ||"
-    ]
-    if run_metadata:
-        meta_line = f"Metadata: {completed}/{total_items} completed, {incomplete} incomplete ({percent_complete}%)"
-        lines.extend(box_line(meta_line, box_width))
     if asset_summaries:
-        asset_line = f"Assets: {', '.join(asset_summaries)}"
-        lines.extend(box_line(asset_line, box_width))
-    items_line = f"Items: total processed {total_items} titles"
-    lines.extend(box_line(items_line, box_width))
+        total_size = ""
+        if library_filesize is not None and library_filesize.get(library_name, 0) > 0:
+            total_size = f", Total: {human_readable_size(library_filesize[library_name])}"
+        lines.extend(box_line(f"Assets Disk Size - {', '.join(asset_summaries)}{total_size}", box_width))
+
     lines.append(header)
     for line in lines:
         logger.info(line)
 
 def log_final_summary(
     logger, elapsed_time, library_item_counts, metadata_summaries, library_filesize,
-    orphans_removed, cleanup_title_orphans, selected_libraries, libraries, config,
+    orphans_removed, cleanup_title_orphans, selected_libraries, libraries, config, feature_flags=None, library_summary=None
 ):
-    box_width = 80
+    box_width = 50
     def box_line(text, width=box_width):
         wrapped = textwrap.wrap(text, width=width - 4)
         return [f"|| {line.ljust(width - 4)}||" for line in wrapped]
@@ -659,21 +699,64 @@ def log_final_summary(
         f"Libraries processed: {len(library_item_counts)} | Skipped: {', '.join(skipped_libraries) if skipped_libraries else 'None'}",
         box_width
     ))
-    items_str = ", ".join(f"{lib} ({count})" for lib, count in library_item_counts.items())
-    lines.extend(box_line(f"Items: {items_str}", box_width))
-    meta_str = ", ".join(
-        f"{lib} ({summary['complete']}/{summary['total_items']}, {summary['percent_complete']}%, {summary['incomplete']} incomplete)"
-        for lib, summary in metadata_summaries.items()
-    )
-    lines.extend(box_line(f"Metadata: {meta_str}", box_width))
 
-    assets_str = ", ".join(f"{lib} ({human_readable_size(size)})" for lib, size in library_filesize.items())
     total_asset_size = sum(library_filesize.values())
-    assets_line = f"Assets: {assets_str}, Total ({human_readable_size(total_asset_size)})"
-    lines.extend(box_line(assets_line, box_width))
+    for lib, summary in metadata_summaries.items():
+        if summary is None:
+            continue
+        libsum = summary.get("library_summary", {})
+        asset_size = library_filesize.get(lib, 0)
+        library_type = (summary.get("library_type", "") or "unknown").strip().lower()
+        if library_type not in ("movie", "tv", "show"):
+            if "movie" in lib.lower():
+                library_type = "movie"
+            elif "tv" in lib.lower() or "show" in lib.lower():
+                library_type = "tv"
+            else:
+                library_type = "unknown"
+                
+        lines.append(border)
+        lines.extend(box_line(f"{lib}: {summary['total_items']} Items Processed", box_width))
+        lines.extend(box_line(
+            f"Metadata Statistic - Downloaded: {libsum.get('meta_downloaded', 0)}, "
+            f"Upgraded: {libsum.get('meta_upgraded', 0)}, "
+            f"Skipped: {libsum.get('meta_skipped', 0)}", box_width))
+        lines.extend(box_line(
+            f"Metadata Completion - {summary['complete']}/{summary['total_items']} Completed, "
+            f"{summary['incomplete']} Incomplete ({summary['percent_complete']}%)", box_width))
+    
+        if feature_flags and feature_flags.get("poster", False) and library_type in ("movie", "tv", "show"):
+            lines.extend(box_line(
+                f"Poster Assets - Downloaded: {libsum.get('poster_downloaded', 0)}, "
+                f"Upgraded: {libsum.get('poster_upgraded', 0)}, "
+                f"Skipped: {libsum.get('poster_skipped', 0)}", box_width))
+
+        if feature_flags and feature_flags.get("background", False) and library_type in ("movie", "tv", "show"):
+            lines.extend(box_line(
+                f"Background Assets - Downloaded: {libsum.get('background_downloaded', 0)}, "
+                f"Upgraded: {libsum.get('background_upgraded', 0)}, "
+                f"Skipped: {libsum.get('background_skipped', 0)}", box_width))
+
+        if (
+            feature_flags and feature_flags.get("season", False)
+            and library_type in ("tv", "show")
+            and (
+                libsum.get('season_poster_downloaded', 0) > 0 or
+                libsum.get('season_poster_upgraded', 0) > 0 or
+                libsum.get('season_poster_skipped', 0) > 0
+            )
+        ):
+            lines.extend(box_line(
+                f"Season Poster Assets - Downloaded: {libsum.get('season_poster_downloaded', 0)}, "
+                f"Upgraded: {libsum.get('season_poster_upgraded', 0)}, "
+                f"Skipped: {libsum.get('season_poster_skipped', 0)}", box_width))
+
+        lines.extend(box_line(
+            f"Assets Disk Size - {human_readable_size(asset_size)} / {human_readable_size(total_asset_size)}", box_width))
+        lines.append(border)
 
     if cleanup_title_orphans:
-        lines.extend(box_line(f"Cleanup: {orphans_removed} title removed", box_width))
+        lines.extend(box_line(f"Cleanup - {orphans_removed} Items Removed", box_width))
     if config["settings"].get("dry_run", False):
         lines.extend(box_line("[Dry Run] Completed. No files were written.", box_width))
     lines.append(border)

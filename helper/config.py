@@ -1,4 +1,4 @@
-from ruamel.yaml import YAML
+import yaml
 from pathlib import Path
 from helper.logging import log_config_event
 
@@ -25,7 +25,7 @@ DEFAULT_CONFIG = {
         "fallback": ["zh", "ja"]
     },
     "metadata": {
-        "directory": "metadata",
+        "path": "metadata",
         "run_basic": True,
         "run_enhanced": True,
     },
@@ -119,8 +119,7 @@ def load_config_file():
     if CONFIG_FILE.exists():
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             try:
-                yaml = YAML()
-                user_config = yaml.load(f) or {}
+                user_config = yaml.safe_load(f) or {}
                 warn_unknown_keys(user_config, DEFAULT_CONFIG)
                 merge_config_dicts(config, user_config)
                 log_config_event("config_loaded", config_file=CONFIG_FILE)
