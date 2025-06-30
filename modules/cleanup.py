@@ -1,5 +1,4 @@
-import asyncio
-from ruamel.yaml import YAML
+import asyncio, yaml
 from pathlib import Path
 from helper.logging import log_cleanup_event
 from helper.cache import load_cache, save_cache
@@ -54,11 +53,9 @@ async def cleanup_title_orphans(
             orphans_removed += 1
     save_cache(cache)
 
-    plex_libraries = config.get("plex_libraries", [])
-    preferred_filenames = {
-        f"{lib.lower().replace(' ', '_')}.yml" for lib in plex_libraries
-    }
-    metadata_dir = Path(config["metadata"]["directory"])
+    library_types = {"movie", "tv", "show"} 
+    preferred_filenames = {f"{lt}_metadata.yml" for lt in library_types}
+    metadata_dir = Path(config["metadata"]["path"])
     def extract_title_year(orphan_title):
         if " (" in orphan_title and orphan_title.endswith(")"):
             t, y = orphan_title.rsplit(" (", 1)
@@ -80,8 +77,7 @@ async def cleanup_title_orphans(
                 continue
             try:
                 with open(metadata_file, "r", encoding="utf-8") as f:
-                    yaml = YAML()
-                    metadata_content = yaml.load(f) or {}
+                    metadata_content = yaml.safe_load(f) or {}
 
                 metadata_entries = metadata_content.get("metadata", {})
                 cleaned_metadata = {k: v for k, v in metadata_entries.items() if k in global_existing_titles}
@@ -99,9 +95,7 @@ async def cleanup_title_orphans(
                     else:
                         metadata_content["metadata"] = cleaned_metadata
                         with open(metadata_file, "w", encoding="utf-8") as f:
-                            yaml.default_flow_style = False
-                            yaml.allow_unicode = True
-                            yaml.dump(metadata_content, f)
+                            yaml.dump(metadata_content, f, allow_unicode=True, default_flow_style=False)
                         log_cleanup_event("cleanup_removed_orphans", orphans_in_file=orphans_in_file, filename=metadata_file.name)
                     orphans_removed += orphans_in_file
 

@@ -64,7 +64,8 @@ if __name__ == "__main__":
             elapsed_time = (end_time - start_time).total_seconds()
             log_final_summary(
                 logger, elapsed_time, library_item_counts, metadata_summaries, library_filesize,
-                orphans_removed, cleanup_title_orphans, selected_libraries, all_libraries, config
+                orphans_removed, cleanup_title_orphans, selected_libraries, all_libraries, config,
+                feature_flags=feature_flags
             )
 
     try:

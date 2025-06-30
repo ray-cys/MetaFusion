@@ -329,8 +329,6 @@ def connect_plex_library(config, selected_libraries=None):
     return plex, sections, libraries, selected_libraries, all_libraries
 
 _plex_cache = {}
-
-_plex_cache = {}
 async def get_plex_metadata(item, _season_cache=None, _episode_cache=None, _movie_cache=None):
     global _plex_cache
     if _season_cache is None:
@@ -351,6 +349,8 @@ async def get_plex_metadata(item, _season_cache=None, _episode_cache=None, _movi
         library_section = getattr(item, "librarySection", None)
         library_name = getattr(library_section, "title", None) or "Unknown"
         library_type = (getattr(library_section, "type", None) or getattr(item, "type", None) or "unknown").lower()
+        if library_type == "movies":
+            library_type = "movie"
         if library_type == "show":
             library_type = "tv"
     except Exception as e:
