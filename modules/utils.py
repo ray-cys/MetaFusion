@@ -76,8 +76,7 @@ def get_best_poster(
     ]
     if filtered:
         best = max(filtered, key=lambda x: (x["vote_average"], x["width"] * x["height"]))
-        return best
-    
+        return best    
     filtered = [
         img for img in images_to_consider
         if img.get("vote_average", 0) >= relaxed_vote and
@@ -86,22 +85,19 @@ def get_best_poster(
     ]
     if filtered:
         best = max(filtered, key=lambda x: (x["vote_average"], x["width"] * x["height"]))
-        return best
-    
+        return best    
     filtered = [
         img for img in images_to_consider
         if img.get("width", 0) >= min_width and img.get("height", 0) >= min_height
     ]
     if filtered:
         best = max(filtered, key=lambda x: x["width"] * x["height"])
-        return best
-    
+        return best   
     if images_to_consider:
         best = max(images_to_consider, key=lambda x: x["width"] * x["height"])
-        return best
-    
-    if images_to_consider:
-        return images_to_consider[0]
+        return best    
+    if images:
+        return images[0]
     else:
         return None
 
@@ -130,8 +126,7 @@ def get_best_background(
     ]
     if filtered:
         best = max(filtered, key=lambda x: (x["vote_average"], x["width"] * x["height"]))
-        return best
-    
+        return best 
     filtered = [
         img for img in images
         if img.get("vote_average", 0) >= relaxed_vote and
@@ -140,12 +135,10 @@ def get_best_background(
     ]
     if filtered:
         best = max(filtered, key=lambda x: (x["vote_average"], x["width"] * x["height"]))
-        return best
-    
+        return best    
     if images:
         best = max(images, key=lambda x: (x["vote_average"], x["width"] * x["height"]))
         return best
-
     if images:
         return images[0]
     else:

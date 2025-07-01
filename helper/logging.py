@@ -621,9 +621,9 @@ def log_library_summary(
     title = "LIBRARY PROCESSING SUMMARY"
     lines = [
         header,
-        f"|| {title.center(box_width - 4)} ||",
+        f"| {title.center(box_width - 4)} |",
         header,
-        f"|| {('Library: ' + library_name + ' | Items Processed: ' + str(total_items)).ljust(box_width - 4)} ||"
+        f"| {('Library: ' + library_name + ' | Items Processed: ' + str(total_items)).ljust(box_width - 4)} |"
     ]
     
     if library_summary:
