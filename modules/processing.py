@@ -211,7 +211,7 @@ async def process_library(
             try:
                 output_path.parent.mkdir(parents=True, exist_ok=True)
                 with open(output_path, "w", encoding="utf-8") as f:
-                    yaml.dump(consolidated_metadata, f, allow_unicode=True, default_flow_style=False)
+                    yaml.dump(consolidated_metadata, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
                 log_processing_event("processing_metadata_saved", output_path=output_path)
                 save_cache(load_cache())
                 log_processing_event("processing_cache_saved")

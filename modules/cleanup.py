@@ -95,7 +95,7 @@ async def cleanup_title_orphans(
                     else:
                         metadata_content["metadata"] = cleaned_metadata
                         with open(metadata_file, "w", encoding="utf-8") as f:
-                            yaml.dump(metadata_content, f, allow_unicode=True, default_flow_style=False)
+                            yaml.dump(metadata_content, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
                         log_cleanup_event("cleanup_removed_orphans", orphans_in_file=orphans_in_file, filename=metadata_file.name)
                     orphans_removed += orphans_in_file
 

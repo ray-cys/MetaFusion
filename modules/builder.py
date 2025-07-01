@@ -1,4 +1,5 @@
 import shutil, asyncio
+from collections import defaultdict
 from helper.logging import log_builder_event, log_asset_status
 from helper.cache import meta_cache_async
 from helper.plex import get_plex_country
@@ -530,35 +531,67 @@ async def build_tv(
         show_credits = get_meta_field(details, "credits", {})
         show_crew = get_meta_field(show_credits, "crew", [])
         show_cast = get_meta_field(show_credits, "cast", [])
-        
         season_credits = get_meta_field(season_details, "credits", {})
         season_crew = get_meta_field(season_credits, "crew", [])
         season_cast = get_meta_field(season_credits, "cast", [])
 
         ep_director_jobs = {"Director", "Co-Director", "Assistant Director"}
-        ep_writer_jobs = {"Writer", "Screenplay", "Story", "Creator", "Co-Writer", "Author", "Adaptation"}
-
+        ep_writer_jobs = {"Writer", "Screenplay", "Story", "Creator", "Co-Writer", "Author", "Adaptation", "Novel"}
+        
+        show_crew_by_department = defaultdict(list)
+        for member in show_crew:
+            dept = member.get("department", "")
+            show_crew_by_department[dept].append(member)
+        
         episodes = {}
         for episode in get_meta_field(season_details, "episodes", []):
             ep_num = episode.get("episode_number")
             if not seasons_episodes or season_number not in seasons_episodes or ep_num not in seasons_episodes[season_number]:
                 continue
-            ep_crew = get_meta_field(episode, "crew", []) or season_crew or show_crew
+        
+            ep_crew = get_meta_field(episode, "crew", [])
+            season_crew = season_crew or []
+            show_crew = show_crew or []
             ep_credits = get_meta_field(episode, "credits", {})
-            ep_cast = get_meta_field(ep_credits, "cast", []) or season_cast or show_cast
-            ep_guest_stars = get_meta_field(ep_credits, "guest_stars", [])
-            
+        
             ep_directors = [m.get("name", "") for m in ep_crew if m.get("job") in ep_director_jobs]
+            if not ep_directors:
+                ep_directors = [m.get("name", "") for m in season_crew if m.get("job") in ep_director_jobs]
+            if not ep_directors:
+                ep_directors = [m.get("name", "") for m in show_crew if m.get("job") in ep_director_jobs]
+            if not ep_directors:
+                directing_dept = show_crew_by_department.get("Directing", [])
+                ep_directors = [m.get("name", "") for m in directing_dept if m.get("job") in ep_director_jobs]        
             ep_writers = [m.get("name", "") for m in ep_crew if m.get("job") in ep_writer_jobs]
-            ep_cast = [c.get("name", "") for c in ep_cast[:10]]
-            ep_guest_stars = [g.get("name", "") for g in ep_guest_stars[:5]]
+            if not ep_writers:
+                ep_writers = [m.get("name", "") for m in season_crew if m.get("job") in ep_writer_jobs]
+            if not ep_writers:
+                ep_writers = [m.get("name", "") for m in show_crew if m.get("job") in ep_writer_jobs]
+            if not ep_writers:
+                writing_dept = show_crew_by_department.get("Writing", [])
+                ep_writers = [m.get("name", "") for m in writing_dept if m.get("job") in ep_writer_jobs]        
+            ep_cast = get_meta_field(ep_credits, "cast", [])
+            if not ep_cast:
+                ep_cast = season_cast
+            if not ep_cast:
+                ep_cast = show_cast
+            if not ep_cast:
+                season_regulars = get_meta_field(ep_credits, "season_regular", [])
+                ep_cast = season_regulars
+            if not ep_cast:
+                cast_dept = show_crew_by_department.get("Series Cast", [])
+                ep_cast = [m for m in cast_dept if m.get("job") == "Actor"]
+            ep_cast = [c.get("name", "") for c in ep_cast[:10] if c.get("name", "")]
+            ep_guest_stars = get_meta_field(ep_credits, "guest_stars", [])
+            ep_guest_stars = [g.get("name", "") for g in ep_guest_stars[:5] if g.get("name", "")]
+        
             ep_air_date = get_meta_field(episode, "air_date", "") or ""
             ep_runtime = get_meta_field(episode, "runtime", None)
-
+        
             ep_basic_fields = ["sort_title", "original_title", "originally_available", "runtime", "summary"]
             ep_enhanced_fields = ["cast.sync", "guest.sync", "director.sync", "writer.sync"]
             ep_fields_to_write = ep_basic_fields + (ep_enhanced_fields if config["metadata"].get("run_enhanced", True) else [])
-
+        
             episode_dict = {k: v for k, v in {
                 "title": get_meta_field(episode, "name", ""),
                 "sort_title": get_meta_field(episode, "name", ""),
