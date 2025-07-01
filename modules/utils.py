@@ -4,7 +4,9 @@ from helper.config import load_config_file
 from helper.cache import load_cache
 from helper.tmdb import tmdb_api_request
 
-def smart_meta_update(existing_metadata, new_metadata):
+def smart_meta_update(existing_metadata, new_metadata, exclude_fields=None):
+    if exclude_fields is None:
+        exclude_fields = {"last_updated", "cache_key", "poster_average", "season_average", "background_average"}
     changed_fields = []
     for key, new_value in new_metadata.items():
         existing_value = existing_metadata.get(key)
@@ -258,9 +260,9 @@ def get_asset_path(config, meta, asset_type="poster", season_number=None):
             return assets_path / library_type / show_path / f"Season{season_number:02}.jpg"
     return None
 
-def asset_temp_path(config, library_name, extension="jpg"):
+def asset_temp_path(config, library_type, extension="jpg"):
     assets_path = Path(config["assets"]["path"])
-    temp_dir = assets_path / library_name
+    temp_dir = assets_path / library_type
     temp_dir.mkdir(parents=True, exist_ok=True)
     temp_filename = f"temp_{uuid.uuid4().hex}.{extension}"
     return temp_dir / temp_filename

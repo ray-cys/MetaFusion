@@ -1,4 +1,4 @@
-import asyncio, logging, orjson, hashlib
+import asyncio, logging, json, hashlib
 from aiolimiter import AsyncLimiter
 from helper.logging import log_tmdb_event
 
@@ -16,7 +16,7 @@ async def tmdb_api_request(
     if endpoint_or_url.startswith("http"):
         url = endpoint_or_url
         query = params or {}
-        cache_key = f"{url}:{orjson.dumps(query, option=orjson.OPT_SORT_KEYS).decode()}"
+        cache_key = f"{url}:{json.dumps(query, sort_keys=True)}"
     else:
         if api_key is None:
             api_key = config.get("tmdb", {}).get("api_key")
@@ -35,7 +35,7 @@ async def tmdb_api_request(
         if "region" not in params:
             params["region"] = region
         query.update(params)
-        cache_key = f"{url}:{orjson.dumps(query, option=orjson.OPT_SORT_KEYS).decode()}"
+        cache_key = f"{url}:{json.dumps(query, sort_keys=True)}"
 
     cache_hash = hashlib.sha256(cache_key.encode()).hexdigest()
     if cache and cache_hash in tmdb_response_cache:
