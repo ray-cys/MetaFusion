@@ -7,12 +7,7 @@ echo "[KOMETA SCRIPT] MetaFusion script completed."
 LOGFILE="/mnt/user/appdata/kometa/scripts/MetaFusion/logs/metafusion.log"
 
 # Extract the METAFUSION SUMMARY REPORT block 
-SUMMARY=$(awk '
-  /METAFUSION SUMMARY REPORT/ {inbox=1}
-  inbox && /^=+$/ {if (!start) {start=1}; print; next}
-  start && /^=+$/ {print; exit}
-  start {print}
-' "$LOGFILE")
+SUMMARY=$(tail -n 32 "$LOGFILE")
 
 # Remove timestamps and log level
 SUMMARY=$(echo "$SUMMARY" | sed -E 's/^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2},[0-9]{3} - [A-Z]+ - //')

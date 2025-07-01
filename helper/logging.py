@@ -688,8 +688,11 @@ def log_final_summary(
     border = "=" * box_width
     title = "METAFUSION SUMMARY REPORT".center(box_width - 4)
     lines = [
+        "",
+        "",
+        "",
         border,
-        f"|| {title.center(box_width - 4)} ||",
+        f"| {title.center(box_width - 4)} |",
         border
     ]
     minutes, seconds = divmod(int(elapsed_time), 60)
