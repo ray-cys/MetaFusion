@@ -656,7 +656,7 @@ async def build_tv(
     all_filled = show_fields_filled + episode_filled
     all_total = show_fields_total + episode_total
     grand_percent = round((all_filled / all_total) * 100) if all_total else 100
-    is_complete = (grand_percent >= 100)
+    is_complete = (grand_percent >= 90)
 
     metadata_changed = False
     changes = []
@@ -897,7 +897,7 @@ async def build_tv(
                 "builder_no_suitable_asset_season", media_type="TV Show", asset_type="poster",
                 full_title=full_title, season_number=season_number
             )
-            season_poster_actions[season_number] = "skipped"
+            season_poster_actions[season_number] = "missing"
             return
 
         asset_path = get_asset_path(config, meta, asset_type="season", season_number=season_number)

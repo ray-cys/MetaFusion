@@ -5,7 +5,6 @@ metafusion_run: true
 
 # Dry run and logging configuration
 settings:
-  schedule: "0 3 * * *"
   dry_run: false
   log_level: "INFO"
 

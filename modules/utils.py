@@ -86,44 +86,62 @@ def get_best_poster(
     
     for lang in language_priority:
         language_filtered = [img for img in images if img.get("iso_639_1") == lang]
-        if language_filtered:
-            images_to_consider = language_filtered
-            break
-    else:
-        images_to_consider = images
-        
+        if not language_filtered:
+            continue
+        filtered = [
+            img for img in language_filtered
+            if img.get("vote_average", 0) >= prefer_vote and
+               img.get("width", 0) >= max_width and
+               img.get("height", 0) >= max_height
+        ]
+        if filtered:
+            best = max(filtered, key=lambda x: (x["vote_average"], x["width"] * x["height"]))
+            return best
+        filtered = [
+            img for img in language_filtered
+            if img.get("vote_average", 0) >= relaxed_vote and
+               img.get("width", 0) >= min_width and
+               img.get("height", 0) >= min_height
+        ]
+        if filtered:
+            best = max(filtered, key=lambda x: (x["vote_average"], x["width"] * x["height"]))
+            return best
+        filtered = [
+            img for img in language_filtered
+            if img.get("width", 0) >= min_width and img.get("height", 0) >= min_height
+        ]
+        if filtered:
+            best = max(filtered, key=lambda x: x["width"] * x["height"])
+            return best
+
     filtered = [
-        img for img in images_to_consider
+        img for img in images
         if img.get("vote_average", 0) >= prefer_vote and
            img.get("width", 0) >= max_width and
            img.get("height", 0) >= max_height
     ]
     if filtered:
         best = max(filtered, key=lambda x: (x["vote_average"], x["width"] * x["height"]))
-        return best    
+        return best
     filtered = [
-        img for img in images_to_consider
+        img for img in images
         if img.get("vote_average", 0) >= relaxed_vote and
            img.get("width", 0) >= min_width and
            img.get("height", 0) >= min_height
     ]
     if filtered:
         best = max(filtered, key=lambda x: (x["vote_average"], x["width"] * x["height"]))
-        return best    
+        return best
     filtered = [
-        img for img in images_to_consider
+        img for img in images
         if img.get("width", 0) >= min_width and img.get("height", 0) >= min_height
     ]
     if filtered:
         best = max(filtered, key=lambda x: x["width"] * x["height"])
-        return best   
-    if images_to_consider:
-        best = max(images_to_consider, key=lambda x: x["width"] * x["height"])
-        return best    
+        return best
     if images:
         return images[0]
-    else:
-        return None
+    return None
 
 def get_best_background(
     config, images, prefer_vote=None, max_width=None, max_height=None, relaxed_vote=None,
@@ -205,12 +223,12 @@ def smart_asset_upgrade(
         "asset_path_exists": asset_path.exists(),
         "new_image_path_exists": new_image_path.exists() if new_image_path else False
     }
+    if not asset_path.exists() or cached_votes == 0:
+        return True, "NO_EXISTING_ASSET", context
+    if cached_votes < vote_threshold and new_votes >= vote_threshold:
+        return True, "UPGRADE_THRESHOLD", context
     if new_votes > cached_votes:
         return True, "UPGRADE_VOTES", context
-    elif cached_votes == 0 and new_votes >= vote_threshold:
-        return True, "UPGRADE_THRESHOLD", context
-    if not asset_path.exists():
-        return True, "NO_EXISTING_ASSET", context
     if new_image_path and new_image_path.exists():
         try:
             with Image.open(new_image_path) as img:
