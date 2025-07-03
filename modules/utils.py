@@ -1,4 +1,4 @@
-import asyncio, hashlib, uuid
+import asyncio, hashlib, uuid, re
 from pathlib import Path
 from helper.config import load_config_file
 from helper.cache import load_cache
@@ -38,7 +38,31 @@ def get_meta_field(data, field, default=None, path=None):
         return data.get(field, default)
     except Exception:
         return default
-    
+
+def recursive_season_diff(old, new, path=""):
+    changes = []
+    def strip_indices(p):
+        return re.sub(r"\[\d+\]", "", p)
+    if isinstance(old, dict) and isinstance(new, dict):
+        all_keys = set(old.keys()) | set(new.keys())
+        for k in all_keys:
+            new_path = f"{path}['{k}']" if path else f"['{k}']"
+            if k not in old or k not in new:
+                changes.append(strip_indices(new_path))
+            else:
+                changes.extend(recursive_season_diff(old[k], new[k], new_path))
+    elif isinstance(old, list) and isinstance(new, list):
+        min_len = min(len(old), len(new))
+        for i in range(min_len):
+            new_path = f"{path}[{i}]"
+            changes.extend(recursive_season_diff(old[i], new[i], new_path))
+        if len(old) != len(new):
+            changes.append(strip_indices(path))
+    else:
+        if old != new:
+            changes.append(strip_indices(path))
+    return list(set(changes))
+
 def get_best_poster(
     config, images, preferred_language="en", fallback=None, prefer_vote=None, max_width=None,
     max_height=None, relaxed_vote=None, min_width=None, min_height=None,
@@ -155,6 +179,9 @@ def smart_asset_upgrade(
     if asset_type == "background":
         vote_threshold = config["background_set"].get("vote_threshold", 5.0)
         cache_key_name = "bg_average"
+    elif asset_type == "season":
+        vote_threshold = config["poster_set"].get("vote_threshold", 5.0)
+        cache_key_name = "season_average"
     else:
         vote_threshold = config["poster_set"].get("vote_threshold", 5.0)
         cache_key_name = "poster_average"
@@ -163,7 +190,12 @@ def smart_asset_upgrade(
         cache = load_cache()
         cached = cache.get(cache_key)
         if isinstance(cached, dict):
-            cached_votes = cached.get(cache_key_name, 0)
+            if asset_type == "season" and season_number is not None:
+                seasons = cached.get("seasons", {})
+                season_entry = seasons.get(str(season_number), {})
+                cached_votes = season_entry.get(cache_key_name, 0)
+            else:
+                cached_votes = cached.get(cache_key_name, 0)
     context = {
         "new_width": new_width,
         "new_height": new_height,

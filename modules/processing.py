@@ -72,10 +72,15 @@ async def process_library(
     total_asset_size = 0
     completed = 0
     incomplete = 0
+    season_count = 0
+    episode_count = 0
     meta_downloaded = meta_upgraded = meta_skipped = 0
     poster_downloaded = poster_upgraded = poster_skipped = 0
     background_downloaded = background_upgraded = background_skipped = 0
     season_poster_downloaded = season_poster_upgraded = season_poster_skipped = 0
+    poster_missing = 0
+    background_missing = 0
+    season_poster_missing = 0 
     
     try:
         library_name = library_section.title
@@ -124,6 +129,7 @@ async def process_library(
     
         all_stats = []
         async def process_and_collect(item):
+            nonlocal poster_missing, background_missing, season_poster_missing
             stats = await process_item(
                 plex_item=item, consolidated_metadata=consolidated_metadata, config=config,
                 feature_flags=feature_flags, existing_yaml_data=existing_yaml_data,
@@ -174,6 +180,11 @@ async def process_library(
                         nonlocal season_poster_skipped
                         season_poster_skipped += 1
 
+                poster_missing += stats.get("poster_missing", 0)
+                background_missing += stats.get("background_missing", 0)
+                if library_type in ("tv", "show"):
+                    season_poster_missing += stats.get("season_poster_missing", 0)
+
                 if feature_flags["poster"]:
                     nonlocal poster_size
                     poster_size += stats.get("poster", {}).get("size", 0)
@@ -190,9 +201,17 @@ async def process_library(
                 total_asset_size = (
                     poster_size + background_size + season_poster_size
                 )
+                
+                if library_type in ("tv", "show"):
+                    seasons_data = stats.get("seasons", {})
+                    nonlocal season_count, episode_count
+                    season_count += len(seasons_data)
+                    for season in seasons_data.values():
+                        episode_count += len(season.get("episodes", {}))
+                
                 if feature_flags["metadata_basic"]:
-                    percent = stats.get("percent", 0)
-                    if percent >= 100:
+                    is_complete = stats.get("is_complete", False)
+                    if is_complete:
                         nonlocal completed
                         completed += 1
                     else:
@@ -222,20 +241,23 @@ async def process_library(
 
         run_metadata = feature_flags["metadata_basic"] or feature_flags["metadata_enhanced"]
         percent_complete = round((completed / total_items) * 100, 2) if total_items else 0.0
+        percent_incomplete = round((incomplete / total_items) * 100, 2) if total_items else 0.0
 
         library_summary = {
             "meta_downloaded": meta_downloaded, "meta_upgraded": meta_upgraded, "meta_skipped": meta_skipped,
             "poster_downloaded": poster_downloaded, "poster_upgraded": poster_upgraded, "poster_skipped": poster_skipped,
             "background_downloaded": background_downloaded, "background_upgraded": background_upgraded, "background_skipped": background_skipped,
             "season_poster_downloaded": season_poster_downloaded, "season_poster_upgraded": season_poster_upgraded, "season_poster_skipped": season_poster_skipped,
+            "poster_missing": poster_missing, "background_missing": background_missing, "season_poster_missing": season_poster_missing,
         }
 
         log_library_summary(
             library_name=library_name, completed=completed, incomplete=incomplete, total_items=total_items,
-            percent_complete=percent_complete, poster_size=poster_size, background_size=background_size,
+            percent_complete=percent_complete, percent_incomplete=percent_incomplete,
+            poster_size=poster_size, background_size=background_size,
             season_poster_size=season_poster_size, library_filesize=library_filesize,
             run_metadata=run_metadata, library_summary=library_summary, library_type=library_type,
-            feature_flags=feature_flags
+            feature_flags=feature_flags, season_count=season_count, episode_count=episode_count
         )
 
         if metadata_summaries is not None:
@@ -244,8 +266,14 @@ async def process_library(
                 "incomplete": incomplete,
                 "total_items": total_items,
                 "percent_complete": percent_complete if run_metadata else None,
+                "percent_incomplete": percent_incomplete if run_metadata else None,
                 "library_summary": library_summary,
                 "library_type": library_type,
+                "season_count": season_count,
+                "episode_count": episode_count,
+                "poster_missing": poster_missing,
+                "background_missing": background_missing,
+                "season_poster_missing": season_poster_missing,
             }
         
         return all_stats

@@ -185,5 +185,6 @@ async def cleanup_title_orphans(
     if removed_summary:
         log_cleanup_event("cleanup_consolidated_removed", removed_summary=removed_summary)
 
-    log_cleanup_event("cleanup_total_removed", orphans_removed=orphans_removed)
+    unique_titles_removed = set(t for t, v in removed_summary.items() if any(v.values()))
+    log_cleanup_event("cleanup_total_removed", orphans_removed=len(unique_titles_removed))
     return orphans_removed
