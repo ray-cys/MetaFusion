@@ -223,7 +223,7 @@ def smart_asset_upgrade(
         "asset_path_exists": asset_path.exists(),
         "new_image_path_exists": new_image_path.exists() if new_image_path else False
     }
-    if not asset_path.exists() or cached_votes == 0:
+    if not asset_path.exists() and cached_votes == 0:
         return True, "NO_EXISTING_ASSET", context
     if cached_votes < vote_threshold and new_votes >= vote_threshold:
         return True, "UPGRADE_THRESHOLD", context
