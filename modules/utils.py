@@ -223,7 +223,7 @@ def smart_asset_upgrade(
         "asset_path_exists": asset_path.exists(),
         "new_image_path_exists": new_image_path.exists() if new_image_path else False
     }
-    if not asset_path.exists() or cached_votes == 0:
+    if not asset_path.exists() and cached_votes == 0:
         return True, "NO_EXISTING_ASSET", context
     if cached_votes < vote_threshold and new_votes >= vote_threshold:
         return True, "UPGRADE_THRESHOLD", context
@@ -245,10 +245,9 @@ def smart_asset_upgrade(
     return False, "NO_UPGRADE_NEEDED", context
 
 async def download_poster(config, image_path, save_path, session=None, retries=3):
-    if session is None:
-        url = f"https://image.tmdb.org/t/p/original{image_path}"
-        return False, url, None, "HTTP session failed"
     url = f"https://image.tmdb.org/t/p/original{image_path}"
+    if session is None:
+        return False, url, None, "HTTP session failed"
     last_exception = None
     for attempt in range(retries):
         try:
