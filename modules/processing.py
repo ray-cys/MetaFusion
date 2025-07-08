@@ -75,13 +75,11 @@ async def process_library(
     season_count = 0
     episode_count = 0
     meta_downloaded = meta_upgraded = meta_skipped = 0
-    poster_downloaded = poster_upgraded = poster_skipped = 0
-    background_downloaded = background_upgraded = background_skipped = 0
-    season_poster_downloaded = season_poster_upgraded = season_poster_skipped = 0
-    poster_missing = 0
-    background_missing = 0
-    season_poster_missing = 0 
-    
+    poster_downloaded = poster_upgraded = poster_skipped = poster_missing = poster_failed = 0
+    background_downloaded = background_upgraded = background_skipped = background_missing = background_failed = 0
+    season_poster_downloaded = season_poster_upgraded = season_poster_skipped = season_poster_missing = season_poster_failed = 0
+    missing_seasons_in_media = 0
+
     try:
         library_name = library_section.title
         items = await asyncio.to_thread(library_section.all)
@@ -158,6 +156,12 @@ async def process_library(
                 elif action == "skipped":
                     nonlocal poster_skipped
                     poster_skipped += 1
+                elif action == "missing":
+                    nonlocal poster_missing
+                    poster_missing += 1
+                elif action == "failed":
+                    nonlocal poster_failed
+                    poster_failed += 1
                 action = stats.get("background_action")
                 if action == "downloaded":
                     nonlocal background_downloaded
@@ -168,6 +172,12 @@ async def process_library(
                 elif action == "skipped":
                     nonlocal background_skipped
                     background_skipped += 1
+                elif action == "missing":
+                    nonlocal background_missing
+                    background_missing += 1
+                elif action == "failed":
+                    nonlocal background_failed
+                    background_failed += 1
                 season_actions = stats.get("season_poster_actions", {})
                 for season_action in season_actions.values():
                     if season_action == "downloaded":
@@ -179,11 +189,12 @@ async def process_library(
                     elif season_action == "skipped":
                         nonlocal season_poster_skipped
                         season_poster_skipped += 1
-
-                poster_missing += stats.get("poster_missing", 0)
-                background_missing += stats.get("background_missing", 0)
-                if library_type in ("tv", "show"):
-                    season_poster_missing += stats.get("season_poster_missing", 0)
+                    elif season_action == "missing":
+                        nonlocal season_poster_missing
+                        season_poster_missing += 1
+                    elif season_action == "failed":
+                        nonlocal season_poster_failed
+                        season_poster_failed += 1
 
                 if feature_flags["poster"]:
                     nonlocal poster_size
@@ -246,9 +257,11 @@ async def process_library(
         library_summary = {
             "meta_downloaded": meta_downloaded, "meta_upgraded": meta_upgraded, "meta_skipped": meta_skipped,
             "poster_downloaded": poster_downloaded, "poster_upgraded": poster_upgraded, "poster_skipped": poster_skipped,
+            "poster_failed": poster_failed, "poster_missing": poster_missing,
             "background_downloaded": background_downloaded, "background_upgraded": background_upgraded, "background_skipped": background_skipped,
+            "background_failed": background_failed, "background_missing": background_missing,
             "season_poster_downloaded": season_poster_downloaded, "season_poster_upgraded": season_poster_upgraded, "season_poster_skipped": season_poster_skipped,
-            "poster_missing": poster_missing, "background_missing": background_missing, "season_poster_missing": season_poster_missing,
+            "season_poster_failed": season_poster_failed, "season_poster_missing": season_poster_missing
         }
 
         log_library_summary(
@@ -271,9 +284,6 @@ async def process_library(
                 "library_type": library_type,
                 "season_count": season_count,
                 "episode_count": episode_count,
-                "poster_missing": poster_missing,
-                "background_missing": background_missing,
-                "season_poster_missing": season_poster_missing,
             }
         
         return all_stats

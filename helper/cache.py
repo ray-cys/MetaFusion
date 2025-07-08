@@ -20,6 +20,10 @@ def save_cache(cache):
     with open(CACHE_FILE, "w", encoding="utf-8") as f:
         json.dump(cache, f, indent=2, ensure_ascii=False)
     log_cache_event("cache_saved", count=len(cache), cache_file=CACHE_FILE)
+    for entry in cache.values():
+        if entry.get("media_type") == "tv":
+            entry.pop("season_average", None)
+            entry.pop("season_number", None)
 
 cache_lock = asyncio.Lock()
 async def meta_cache_async(cache_key, tmdb_id, title, year, media_type, **kwargs):

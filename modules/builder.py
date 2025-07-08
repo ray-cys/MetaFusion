@@ -34,33 +34,29 @@ async def build_movie(
     library_type = meta.get("library_type", "movie") if meta else "movie"
     full_title = f"{title} ({year})"
     tmdb_id = meta.get("tmdb_id") if meta else None
-    imdb_id_for_mapping = meta.get("imdb_id") if meta else None
-    imdb_id_for_mapping = ""
-    mapping_id = ""
+    imdb_id = meta.get("imdb_id") if meta else None
+    mapping_id = None
 
-    if not tmdb_id:
-        search_results = await tmdb_api_request(
-            config,
-            "search/movie",
-            params={"query": title},
-            session=session
-        )
-        if search_results and search_results.get("results"):
-            movie_id = search_results["results"][0].get("id")
-            if movie_id:
+    if tmdb_id:
+        mapping_id = int(tmdb_id)
+    else:
+        if imdb_id:
+            mapping_id = imdb_id
+        else:
+            if tmdb_id:
                 external_ids = await tmdb_api_request(
                     config,
-                    f"movie/{movie_id}/external_ids"
+                    f"movie/{tmdb_id}/external_ids"
                 )
                 if external_ids:
-                    imdb_id_for_mapping = external_ids.get("imdb_id", "")
-                    tmdb_id = movie_id
-        mapping_id = imdb_id_for_mapping or ""
-        if not tmdb_id or not mapping_id:
-            log_builder_event("builder_missing_tmdb_and_imdb_id", media_type="Movie", full_title=full_title)
-            return
-    else:
-        mapping_id = int(tmdb_id)
+                    imdb_id_from_tmdb = external_ids.get("imdb_id", "")
+                    if imdb_id_from_tmdb:
+                        mapping_id = imdb_id_from_tmdb
+
+    if not mapping_id:
+        log_builder_event("builder_missing_tmdb_and_imdb_id", media_type="Movie", full_title=full_title)
+        metadata_action = "failed"
+        return
 
     details_key = f"movie/{tmdb_id}"
     details = tmdb_response_cache.get(details_key)
@@ -79,6 +75,7 @@ async def build_movie(
             tmdb_response_cache[details_key] = details
         else:
             log_builder_event("builder_invalid_tmdb_id", media_type="Movie", full_title=full_title)
+            metadata_action = "failed"
             return
 
     release_dates = get_meta_field(details, "results", [], path=["release_dates"])
@@ -126,23 +123,40 @@ async def build_movie(
     ]
     fields_to_write = basic_fields + (enhanced_fields if feature_flags.get("metadata_enhanced", True) else [])
 
-    new_metadata = {k: v for k, v in {
-        "sort_title": title,
-        "original_title": get_meta_field(details, "original_title", title),
-        "originally_available": originally_available,
-        "content_rating": content_rating,
-        "studio": studio or "",
-        "runtime": runtime,
-        "tagline": get_meta_field(details, "tagline", ""),
-        "summary": get_meta_field(details, "overview", ""),
-        "country.sync": countries or [],
-        "genre.sync": genres or [],
-        "cast.sync": top_cast or [],
-        "director.sync": directors or [],
-        "writer.sync": writers or [],
-        "producer.sync": producers or [],
-        "collection.sync": cleaned_collection,
-    }.items() if k in fields_to_write}
+    new_metadata = {}
+    for k in fields_to_write:
+        if k == "sort_title":
+            new_metadata[k] = title or ""
+        elif k == "original_title":
+            new_metadata[k] = get_meta_field(details, "original_title", title) or ""
+        elif k == "originally_available":
+            new_metadata[k] = originally_available or ""
+        elif k == "content_rating":
+            new_metadata[k] = content_rating or ""
+        elif k == "studio":
+            new_metadata[k] = studio or ""
+        elif k == "runtime":
+            new_metadata[k] = runtime if runtime is not None else ""
+        elif k == "tagline":
+            new_metadata[k] = get_meta_field(details, "tagline", "") or ""
+        elif k == "summary":
+            new_metadata[k] = get_meta_field(details, "overview", "") or ""
+        elif k == "country.sync":
+            new_metadata[k] = countries if countries else []
+        elif k == "genre.sync":
+            new_metadata[k] = genres if genres else []
+        elif k == "cast.sync":
+            new_metadata[k] = top_cast if top_cast else []
+        elif k == "director.sync":
+            new_metadata[k] = directors if directors else []
+        elif k == "writer.sync":
+            new_metadata[k] = writers if writers else []
+        elif k == "producer.sync":
+            new_metadata[k] = producers if producers else []
+        elif k == "collection.sync":
+            new_metadata[k] = cleaned_collection or ""
+        else:
+            new_metadata[k] = "" 
 
     expected_fields = [f for f in fields_to_write if f != "collection.sync"]
     if ignored_fields is None:
@@ -158,7 +172,7 @@ async def build_movie(
         )
         percent_filled = round((filled / len(filtered_fields)) * 100)
     percent = percent_filled
-    is_complete = (percent >= 100)
+    is_complete = (percent >= 90)
 
     metadata_changed = False
     changes = []
@@ -210,7 +224,6 @@ async def build_movie(
         await meta_cache_async(cache_key, tmdb_id, title, year, "movie", collection_id=collection_id)
         log_builder_event("builder_metadata_cached", media_type="Movie", full_title=full_title, cache_key=cache_key)
 
-
     async def process_poster():
         poster_size = 0
         nonlocal poster_action
@@ -220,12 +233,12 @@ async def build_movie(
         if not movie_path:
             log_builder_event("builder_no_asset_path", media_type="Movie", full_title=full_title, asset_type="poster", extra="")
             result["poster"]["size"] = poster_size
+            poster_action = "failed"
             return
 
         if feature_flags.get("dry_run", False):
             log_builder_event("builder_dry_run_asset", media_type="Movie", asset_type="poster", full_title=full_title)
             result["poster"]["size"] = poster_size
-            poster_action = "skipped"
             return
         
         preferred_language = config["tmdb"].get("language", "en").split("-")[0]
@@ -242,7 +255,7 @@ async def build_movie(
         if asset_path is None:
             log_builder_event("builder_no_asset_path", media_type="Movie", full_title=full_title, asset_type="poster", extra="")
             result["poster"]["size"] = poster_size
-            poster_action = "skipped"
+            poster_action = "failed"
             return
 
         temp_path = asset_temp_path(config, library_type)
@@ -251,8 +264,9 @@ async def build_movie(
             if not success:
                 log_builder_event(
                     "builder_asset_download_failed", media_type="Movie", asset_type="poster",
-                    full_title=full_title, url=url, status=status, error=error
+                    full_title=full_title, status=status, error=error
                 )
+                poster_action = "failed"
             if success and temp_path.exists():
                 should_upgrade, status_code, context = smart_asset_upgrade(
                     config, asset_path, best, new_image_path=temp_path, asset_type="poster", cache_key=cache_key
@@ -300,12 +314,12 @@ async def build_movie(
         if not movie_path:
             log_builder_event("builder_no_asset_path", media_type="Movie", full_title=full_title, asset_type="background", extra="")
             result["background"]["size"] = background_size
+            background_action = "failed"
             return
 
         if feature_flags.get("dry_run", False):
             log_builder_event("builder_dry_run_asset", media_type="Movie", asset_type="background", full_title=full_title)
             result["background"]["size"] = background_size
-            background_action = "skipped"
             return
     
         preferred_language = config["tmdb"].get("language", "en").split("-")[0]
@@ -322,7 +336,7 @@ async def build_movie(
         if asset_path is None:
             log_builder_event("builder_no_asset_path", media_type="Movie", full_title=full_title, asset_type="background", extra="")
             result["background"]["size"] = background_size
-            background_action = "skipped"
+            background_action = "failed"
             return
 
         temp_path = asset_temp_path(config, library_type)
@@ -331,8 +345,9 @@ async def build_movie(
             if not success:
                 log_builder_event(
                     "builder_asset_download_failed", media_type="Movie", asset_type="background",
-                    full_title=full_title, url=url, status=status, error=error
+                    full_title=full_title, status=status, error=error
                 )
+                background_action = "failed"
             if success and temp_path.exists():
                 should_upgrade, status_code, context = smart_asset_upgrade(
                     config, asset_path, best, new_image_path=temp_path, asset_type="background", cache_key=cache_key
@@ -376,9 +391,6 @@ async def build_movie(
         process_background(),
     )
 
-    poster_missing = 1 if poster_action == "missing" else 0
-    background_missing = 1 if background_action == "missing" else 0
-
     return {
         "percent": percent,
         "incomplete_percent": 100 - percent,
@@ -386,8 +398,6 @@ async def build_movie(
         "metadata_action": metadata_action,
         "poster_action": poster_action,
         "background_action": background_action,
-        "poster_missing": poster_missing,
-        "background_missing": background_missing,
         **result
     }
 
@@ -420,39 +430,32 @@ async def build_tv(
     full_title = f"{title} ({year})"
     tmdb_id = meta.get("tmdb_id") if meta else None
     tvdb_id = meta.get("tvdb_id") if meta else None
+    imdb_id = meta.get("imdb_id") if meta else None
+    mapping_id = None
 
-    if not tmdb_id:
-        search_results = await tmdb_api_request(
+    if tvdb_id:
+        mapping_id = int(tvdb_id)
+    elif imdb_id:
+        mapping_id = imdb_id
+    elif tmdb_id:
+        external_ids = await tmdb_api_request(
             config,
-            "search/tv",
-            params={"query": title},
-            session=session
+            f"tv/{tmdb_id}/external_ids"
         )
-        tvdb_id_for_mapping = ""
-        if search_results and search_results.get("results"):
-            tv_id = search_results["results"][0].get("id")
-            if tv_id:
-                external_ids = await tmdb_api_request(
-                    config,
-                    f"tv/{tv_id}/external_ids"
-                )
-                if external_ids:
-                    tvdb_id_for_mapping = external_ids.get("tvdb_id", "")
-                    tmdb_id = tv_id
-        mapping_id = int(tvdb_id_for_mapping) if tvdb_id_for_mapping else ""
-        if not tmdb_id or not mapping_id:
-            log_builder_event("builder_missing_tvdb_id_and_tmdb_id", media_type="TV Show", id_type="TVDb", full_title=full_title)
-            return
-    else:
-        mapping_id = None 
+        if external_ids:
+            tvdb_id_from_tmdb = external_ids.get("tvdb_id", "")
+            imdb_id_from_tmdb = external_ids.get("imdb_id", "")
+            if tvdb_id_from_tmdb:
+                mapping_id = tvdb_id_from_tmdb
+            elif imdb_id_from_tmdb:
+                mapping_id = imdb_id_from_tmdb
 
-    try:
-        tmdb_id_int = int(tmdb_id)
-    except (ValueError, TypeError):
-        log_builder_event("builder_missing_tvdb_id_and_tmdb_id", media_type="TV Show", full_title=full_title)
+    if not mapping_id:
+        log_builder_event("builder_missing_tvdb_id_and_imdb_id", media_type="TV Show", full_title=full_title)
+        metadata_action = "failed"
         return
 
-    details_key = f"tv/{tmdb_id_int}"
+    details_key = f"tv/{tmdb_id}"
     details = tmdb_response_cache.get(details_key)
     if not details:
         details = await tmdb_api_request(
@@ -469,6 +472,7 @@ async def build_tv(
             tmdb_response_cache[details_key] = details
         else:
             log_builder_event("builder_no_tmdb_id", media_type="TV Show", full_title=full_title)
+            metadata_action = "failed"
             return
 
     content_ratings = get_meta_field(details, "results", [], path=["content_ratings"])
@@ -494,17 +498,28 @@ async def build_tv(
     episode_enhanced_fields = ["cast.sync", "guest.sync", "director.sync", "writer.sync"]
     episode_fields_to_write = episode_basic_fields + (episode_enhanced_fields if config["metadata"].get("run_enhanced", True) else [])
         
-    new_metadata = {k: v for k, v in {
-        "sort_title": title,
-        "original_title": details.get("original_name", title),
-        "originally_available": originally_available,
-        "content_rating": content_rating,
-        "studio": studio or "",
-        "tagline": details.get("tagline", ""),
-        "summary": details.get("overview", ""),
-        "genre.sync": genres or [],
-        "country.sync": countries or [],
-    }.items() if k in show_fields_to_write and (k != "seasons")}
+    new_metadata = {}
+    for k in show_fields_to_write:
+        if k == "sort_title":
+            new_metadata[k] = title or ""
+        elif k == "original_title":
+            new_metadata[k] = details.get("original_name", title) or ""
+        elif k == "originally_available":
+            new_metadata[k] = originally_available or ""
+        elif k == "content_rating":
+            new_metadata[k] = content_rating or ""
+        elif k == "studio":
+            new_metadata[k] = studio or ""
+        elif k == "tagline":
+            new_metadata[k] = details.get("tagline", "") or ""
+        elif k == "summary":
+            new_metadata[k] = details.get("overview", "") or ""
+        elif k == "genre.sync":
+            new_metadata[k] = genres if genres else []
+        elif k == "country.sync":
+            new_metadata[k] = countries if countries else []
+        else:
+            new_metadata[k] = ""
 
     seasons_data = {}
     async def process_season(season_info):
@@ -512,7 +527,7 @@ async def build_tv(
         if season_number == 0 or not seasons_episodes or season_number not in seasons_episodes:
             return season_number, None
     
-        season_key = f"tv/{tmdb_id_int}/season/{season_number}"
+        season_key = f"tv/{tmdb_id}/season/{season_number}"
         season_details = tmdb_response_cache.get(season_key)
         if not season_details:
             season_details = await tmdb_api_request(
@@ -550,42 +565,53 @@ async def build_tv(
             ep_num = episode.get("episode_number")
             if not seasons_episodes or season_number not in seasons_episodes or ep_num not in seasons_episodes[season_number]:
                 continue
-    
+
             ep_crew = get_meta_field(episode, "crew", [])
             ep_credits = get_meta_field(episode, "credits", {})
-    
-            ep_directors = [m.get("name", "") for m in ep_crew if m.get("job") in ep_director_jobs]
-            if not ep_directors:
-                ep_directors = [m.get("name", "") for m in season_crew if m.get("job") in ep_director_jobs]
-            if not ep_directors:
-                ep_directors = [m.get("name", "") for m in show_crew if m.get("job") in ep_director_jobs]
-            if not ep_directors:
-                directing_dept = show_crew_by_department.get("Directing", [])
-                ep_directors = [m.get("name", "") for m in directing_dept if m.get("job") in ep_director_jobs]
-    
-            ep_writers = [m.get("name", "") for m in ep_crew if m.get("job") in ep_writer_jobs]
-            if not ep_writers:
-                ep_writers = [m.get("name", "") for m in season_crew if m.get("job") in ep_writer_jobs]
-            if not ep_writers:
-                ep_writers = [m.get("name", "") for m in show_crew if m.get("job") in ep_writer_jobs]
-            if not ep_writers:
-                writing_dept = show_crew_by_department.get("Writing", [])
-                ep_writers = [m.get("name", "") for m in writing_dept if m.get("job") in ep_writer_jobs]
-    
-            ep_cast = get_meta_field(ep_credits, "cast", [])
-            if not ep_cast:
-                ep_cast = season_cast
-            if not ep_cast:
-                ep_cast = show_cast
-            if not ep_cast:
-                season_regulars = get_meta_field(ep_credits, "season_regular", [])
-                ep_cast = season_regulars
-            if not ep_cast:
-                cast_dept = show_crew_by_department.get("Series Cast", [])
-                ep_cast = [m for m in cast_dept if m.get("job") == "Actor"]
-            ep_cast = [c.get("name", "") for c in ep_cast[:10] if c.get("name", "")]
-            ep_guest_stars = get_meta_field(ep_credits, "guest_stars", [])
-            ep_guest_stars = [g.get("name", "") for g in ep_guest_stars[:5] if g.get("name", "")]
+
+            if ep_crew is not None:
+                ep_directors = [m.get("name", "") for m in ep_crew if m.get("job") in ep_director_jobs]
+            else:
+                if season_crew is not None:
+                    ep_directors = [m.get("name", "") for m in season_crew if m.get("job") in ep_director_jobs]
+                elif show_crew is not None:
+                    ep_directors = [m.get("name", "") for m in show_crew if m.get("job") in ep_director_jobs]
+                else:
+                    directing_dept = show_crew_by_department.get("Directing", [])
+                    ep_directors = [m.get("name", "") for m in directing_dept if m.get("job") in ep_director_jobs]
+
+            if ep_crew is not None:
+                ep_writers = [m.get("name", "") for m in ep_crew if m.get("job") in ep_writer_jobs]
+            else:
+                if season_crew is not None:
+                    ep_writers = [m.get("name", "") for m in season_crew if m.get("job") in ep_writer_jobs]
+                elif show_crew is not None:
+                    ep_writers = [m.get("name", "") for m in show_crew if m.get("job") in ep_writer_jobs]
+                else:
+                    writing_dept = show_crew_by_department.get("Writing", [])
+                    ep_writers = [m.get("name", "") for m in writing_dept if m.get("job") in ep_writer_jobs]
+
+            if ep_credits is not None:
+                ep_cast = get_meta_field(ep_credits, "cast", [])
+                ep_cast = [c.get("name", "") for c in ep_cast[:10] if c.get("name", "")]
+            else:
+                if season_cast is not None:
+                    ep_cast = [c.get("name", "") for c in season_cast[:10] if c.get("name", "")]
+                elif show_cast is not None:
+                    ep_cast = [c.get("name", "") for c in show_cast[:10] if c.get("name", "")]
+                else:
+                    season_regulars = get_meta_field(ep_credits, "season_regular", []) if ep_credits else []
+                    if season_regulars:
+                        ep_cast = [c.get("name", "") for c in season_regulars[:10] if c.get("name", "")]
+                    else:
+                        cast_dept = show_crew_by_department.get("Series Cast", [])
+                        ep_cast = [m.get("name", "") for m in cast_dept if m.get("job") == "Actor"]
+
+            if ep_credits is not None:
+                ep_guest_stars = get_meta_field(ep_credits, "guest_stars", [])
+                ep_guest_stars = [g.get("name", "") for g in ep_guest_stars[:5] if g.get("name", "")]
+            else:
+                ep_guest_stars = []
     
             ep_air_date = get_meta_field(episode, "air_date", "") or ""
             ep_runtime = get_meta_field(episode, "runtime", None)
@@ -594,17 +620,26 @@ async def build_tv(
             ep_enhanced_fields = ["cast.sync", "guest.sync", "director.sync", "writer.sync"]
             ep_fields_to_write = ep_basic_fields + (ep_enhanced_fields if config["metadata"].get("run_enhanced", True) else [])
     
-            episode_dict = {k: v for k, v in {
-                "title": get_meta_field(episode, "name", ""),
-                "sort_title": get_meta_field(episode, "name", ""),
-                "originally_available": ep_air_date,
-                "runtime": ep_runtime,
-                "summary": get_meta_field(episode, "overview", ""),
-                "cast.sync": ep_cast or [],
-                "guest.sync": ep_guest_stars or [],
-                "director.sync": ep_directors or [],
-                "writer.sync": ep_writers or [],
-            }.items() if k in ep_fields_to_write}
+            episode_dict = {}
+            for k in ep_fields_to_write:
+                if k == "title" or k == "sort_title":
+                    episode_dict[k] = get_meta_field(episode, "name", "") or ""
+                elif k == "originally_available":
+                    episode_dict[k] = ep_air_date or ""
+                elif k == "runtime":
+                    episode_dict[k] = ep_runtime if ep_runtime is not None else ""
+                elif k == "summary":
+                    episode_dict[k] = get_meta_field(episode, "overview", "") or ""
+                elif k == "cast.sync":
+                    episode_dict[k] = ep_cast if ep_cast else []
+                elif k == "guest.sync":
+                    episode_dict[k] = ep_guest_stars if ep_guest_stars else []
+                elif k == "director.sync":
+                    episode_dict[k] = ep_directors if ep_directors else []
+                elif k == "writer.sync":
+                    episode_dict[k] = ep_writers if ep_writers else []
+                else:
+                    episode_dict[k] = ""
             episodes[ep_num] = episode_dict
     
         season_air_date = get_meta_field(season_details, "air_date", "") or ""
@@ -656,7 +691,7 @@ async def build_tv(
     all_filled = show_fields_filled + episode_filled
     all_total = show_fields_total + episode_total
     grand_percent = round((all_filled / all_total) * 100) if all_total else 100
-    is_complete = (grand_percent >= 90)
+    is_complete = (grand_percent >= 70)
 
     metadata_changed = False
     changes = []
@@ -699,7 +734,7 @@ async def build_tv(
 
     if metadata_changed:
         cache_key = f"tv:{title}:{year}"
-        await meta_cache_async(cache_key, tmdb_id_int, title, year, "tv")
+        await meta_cache_async(cache_key, tmdb_id, title, year, "tv")
         log_builder_event("builder_metadata_cached", media_type="TV Show", full_title=full_title, cache_key=cache_key)
 
     async def process_tv_poster():
@@ -711,13 +746,12 @@ async def build_tv(
         if not show_path:
             log_builder_event("builder_no_asset_path", media_type="TV Show", full_title=full_title, asset_type="poster", extra="")
             result["poster"]["size"] = poster_size
-            poster_action = "skipped"
+            poster_action = "failed"
             return
 
         if feature_flags.get("dry_run", False):
             log_builder_event("builder_dry_run_asset", media_type="TV Show", asset_type="poster", full_title=full_title)
             result["poster"]["size"] = poster_size
-            poster_action = "skipped"
             return
             
         preferred_language = config["tmdb"].get("language", "en").split("-")[0]
@@ -734,6 +768,7 @@ async def build_tv(
         if asset_path is None:
             log_builder_event("builder_no_asset_path", media_type="TV Show", full_title=full_title, asset_type="poster", extra="")
             result["poster"]["size"] = poster_size
+            poster_action = "failed"
             return
 
         temp_path = asset_temp_path(config, library_type)
@@ -742,8 +777,9 @@ async def build_tv(
             if not success:
                 log_builder_event(
                     "builder_asset_download_failed", media_type="TV Show", asset_type="poster",
-                    full_title=full_title, url=url, status=status, error=error
+                    full_title=full_title, status=status, error=error
                 )
+                poster_action = "failed"
             if success and temp_path.exists():
                 should_upgrade, status_code, context = smart_asset_upgrade(
                     config, asset_path, best, new_image_path=temp_path, asset_type="poster", cache_key=cache_key,
@@ -755,7 +791,7 @@ async def build_tv(
                     if temp_path.exists():
                         temp_path.unlink(missing_ok=True)
                     poster_size = asset_path.stat().st_size if asset_path.exists() else 0
-                    await meta_cache_async(cache_key, tmdb_id_int, title, year, "tv", poster_average=best.get("vote_average", 0))
+                    await meta_cache_async(cache_key, tmdb_id, title, year, "tv", poster_average=best.get("vote_average", 0))
                     if status_code == "NO_EXISTING_ASSET":
                         log_builder_event(
                             "builder_downloading_asset", media_type="TV Show", asset_type="poster",
@@ -788,18 +824,16 @@ async def build_tv(
         nonlocal background_action
         if not config["assets"].get("run_background", True):
             result["background"]["size"] = background_size
-            background_action = "skipped"
             return
         if not show_path:
             log_builder_event("builder_no_asset_path", media_type="TV Show", full_title=full_title, asset_type="background", extra="")
             result["background"]["size"] = background_size
-            background_action = "skipped"
+            background_action = "failed"
             return
 
         if feature_flags.get("dry_run", False):
             log_builder_event("builder_dry_run_asset", media_type="TV Show", asset_type="background", full_title=full_title)
             result["background"]["size"] = background_size
-            background_action = "skipped"
             return
             
         images = get_meta_field(details, "backdrops", [], path=["images"])
@@ -816,6 +850,7 @@ async def build_tv(
         if asset_path is None:
             log_builder_event("builder_no_asset_path", media_type="TV Show", full_title=full_title, asset_type="background", extra="")
             result["background"]["size"] = background_size
+            background_action = "failed"
             return
     
         temp_path = asset_temp_path(config, library_type)
@@ -824,8 +859,9 @@ async def build_tv(
             if not success:
                 log_builder_event(
                     "builder_asset_download_failed", media_type="TV Show", asset_type="background",
-                    full_title=full_title, url=url, status=status, error=error
+                    full_title=full_title, status=status, error=error
                 )
+                background_action = "failed"
             if success and temp_path.exists():
                 should_upgrade, status_code, context = smart_asset_upgrade(
                     config, asset_path, best, new_image_path=temp_path, asset_type="background", cache_key=cache_key,
@@ -837,7 +873,7 @@ async def build_tv(
                     if temp_path.exists():
                         temp_path.unlink(missing_ok=True)
                     background_size = asset_path.stat().st_size if asset_path.exists() else 0
-                    await meta_cache_async(cache_key, tmdb_id_int, title, year, "tv", bg_average=best.get("vote_average", 0))
+                    await meta_cache_async(cache_key, tmdb_id, title, year, "tv", bg_average=best.get("vote_average", 0))
                     if status_code == "NO_EXISTING_ASSET":
                         log_builder_event(
                             "builder_downloading_asset", media_type="TV Show", asset_type="background",
@@ -864,7 +900,7 @@ async def build_tv(
             if temp_path.exists():
                 temp_path.unlink(missing_ok=True)
         result["background"]["size"] = background_size
-
+    
     async def process_season_poster(season_info):
         season_poster_size = 0
         season_number = season_info.get("season_number")
@@ -872,20 +908,22 @@ async def build_tv(
         season_poster_actions[season_number] = "skipped"
         if not season_number or season_number == 0:
             return
+        
         if not show_path:
             log_builder_event("builder_no_asset_path_season", media_type="TV Show", full_title=full_title, season_number=season_number)
+            season_poster_actions[season_number] = "failed"
             return
 
         if feature_flags.get("dry_run", False):
             log_builder_event("builder_dry_run_asset_season", media_type="TV Show", season_number=season_number, asset_type="poster", full_title=full_title)
             result["season_posters"][season_number] = season_poster_size
-            season_poster_actions[season_number] = "skipped"
             return
         
-        season_key = f"tv/{tmdb_id_int}/season/{season_number}"
+        season_key = f"tv/{tmdb_id}/season/{season_number}"
         season_details = tmdb_response_cache.get(season_key)
         if not season_details:
             log_builder_event("builder_no_season_details", media_type="TV Show", full_title=full_title, season_number=season_number)
+            season_poster_actions[season_number] = "failed"
             return
 
         preferred_language = config["tmdb"].get("language", "en").split("-")[0]
@@ -903,7 +941,7 @@ async def build_tv(
         asset_path = get_asset_path(config, meta, asset_type="season", season_number=season_number)
         if asset_path is None:
             log_builder_event("builder_no_asset_path_season", media_type="TV Show", full_title=full_title, season_number=season_number)
-            season_poster_actions[season_number] = "skipped"
+            season_poster_actions[season_number] = "failed"
             return
 
         temp_path = asset_temp_path(config, library_type)
@@ -912,8 +950,9 @@ async def build_tv(
             if not success:
                 log_builder_event(
                     "builder_asset_download_failed_season", media_type="TV Show", asset_type="poster",
-                    full_title=full_title, season_number=season_number, url=url, status=status, error=error
+                    full_title=full_title, season_number=season_number, status=status, error=error
                 )
+                season_poster_actions[season_number] = "failed"
             if success and temp_path.exists():
                 should_upgrade, status_code, context = smart_asset_upgrade(
                     config, asset_path, best, new_image_path=temp_path, asset_type="season", cache_key=cache_key, 
@@ -926,8 +965,8 @@ async def build_tv(
                         temp_path.unlink(missing_ok=True)
                     season_poster_size = asset_path.stat().st_size if asset_path.exists() else 0
                     await meta_cache_async(
-                        cache_key, tmdb_id_int, title, year, "tv",
-                        season_average=best.get("vote_average", 0), season_number=season_number
+                        cache_key, tmdb_id, title, year, "tv",
+                        season_number=season_number, season_average=best.get("vote_average", 0)
                     )
                     if status_code == "NO_EXISTING_ASSET":
                         log_builder_event(
@@ -966,25 +1005,15 @@ async def build_tv(
     season_poster_tasks = []
     if config["assets"].get("run_season", True):
         for season_info in season_infos:
-            ...
-            season_poster_tasks.append(process_season_poster(season_info))
+            season_number = season_info.get("season_number")
+            if season_number:
+                season_poster_tasks.append(process_season_poster(season_info))
 
     await asyncio.gather(
         process_tv_poster(),
         process_tv_background(),
         *season_poster_tasks
     )
-
-    poster_missing = 1 if poster_action == "missing" else 0
-    background_missing = 1 if background_action == "missing" else 0
-    season_poster_missing = 0
-    season_poster_missing = 0
-    for season_info in season_infos:
-        snum = season_info.get("season_number")
-        if snum in (None, 0):
-            continue
-        if not seasons_episodes or snum not in seasons_episodes:
-            season_poster_missing += 1
 
     return {
         "percent": grand_percent,
@@ -995,8 +1024,5 @@ async def build_tv(
         "background_action": background_action,
         "seasons": seasons_data,
         "season_poster_actions": season_poster_actions,
-        "season_poster_missing": season_poster_missing,
-        "poster_missing": poster_missing,
-        "background_missing": background_missing,
         **result
     }

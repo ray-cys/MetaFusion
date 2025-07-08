@@ -11,13 +11,15 @@ def smart_meta_update(existing_metadata, new_metadata, exclude_fields=None):
     for key, new_value in new_metadata.items():
         existing_value = existing_metadata.get(key)
         if isinstance(new_value, list):
-            if not isinstance(existing_value, list):
+            def normalize_list(lst):
+                return sorted([
+                    str(item).strip()
+                    for item in lst if item not in (None, "", [])
+                ])
+            normalized_existing = normalize_list(existing_value if isinstance(existing_value, list) else [])
+            normalized_new = normalize_list(new_value)
+            if normalized_existing != normalized_new:
                 changed_fields.append(key)
-            else:
-                normalized_existing = sorted([str(item) for item in existing_value])
-                normalized_new = sorted([str(item) for item in new_value])
-                if normalized_existing != normalized_new:
-                    changed_fields.append(key)
         elif isinstance(new_value, dict):
             if not isinstance(existing_value, dict):
                 changed_fields.append(key)
@@ -71,6 +73,9 @@ def get_best_poster(
         return None
     if fallback is None:
         fallback = config["tmdb"].get("fallback", [])
+    for val in (None, ""):
+        if val not in fallback:
+            fallback.append(val)
     if isinstance(fallback, str):
         fallback = [fallback]
     language_priority = [preferred_language] + fallback
@@ -114,33 +119,9 @@ def get_best_poster(
             best = max(filtered, key=lambda x: x["width"] * x["height"])
             return best
 
-    filtered = [
-        img for img in images
-        if img.get("vote_average", 0) >= prefer_vote and
-           img.get("width", 0) >= max_width and
-           img.get("height", 0) >= max_height
-    ]
-    if filtered:
-        best = max(filtered, key=lambda x: (x["vote_average"], x["width"] * x["height"]))
-        return best
-    filtered = [
-        img for img in images
-        if img.get("vote_average", 0) >= relaxed_vote and
-           img.get("width", 0) >= min_width and
-           img.get("height", 0) >= min_height
-    ]
-    if filtered:
-        best = max(filtered, key=lambda x: (x["vote_average"], x["width"] * x["height"]))
-        return best
-    filtered = [
-        img for img in images
-        if img.get("width", 0) >= min_width and img.get("height", 0) >= min_height
-    ]
-    if filtered:
-        best = max(filtered, key=lambda x: x["width"] * x["height"])
-        return best
     if images:
-        return images[0]
+        best = max(images, key=lambda x: x.get("width", 0) * x.get("height", 0))
+        return best
     return None
 
 def get_best_background(
@@ -178,13 +159,18 @@ def get_best_background(
     if filtered:
         best = max(filtered, key=lambda x: (x["vote_average"], x["width"] * x["height"]))
         return best    
-    if images:
-        best = max(images, key=lambda x: (x["vote_average"], x["width"] * x["height"]))
+    filtered = [
+        img for img in images
+        if img.get("width", 0) >= min_width and img.get("height", 0) >= min_height
+    ]
+    if filtered:
+        best = max(filtered, key=lambda x: x["width"] * x["height"])
         return best
+
     if images:
-        return images[0]
-    else:
-        return None
+        best = max(images, key=lambda x: x.get("width", 0) * x.get("height", 0))
+        return best
+    return None
 
 def smart_asset_upgrade(
     config, asset_path, new_image_data, new_image_path=None, cache_key=None,
@@ -195,12 +181,15 @@ def smart_asset_upgrade(
     new_height = new_image_data.get("height", 0)
     new_votes = new_image_data.get("vote_average", 0)
     if asset_type == "background":
+        vote_relaxed = config["background_set"].get("vote_relaxed", 3.5)
         vote_threshold = config["background_set"].get("vote_threshold", 5.0)
         cache_key_name = "bg_average"
     elif asset_type == "season":
+        vote_relaxed = config["poster_set"].get("vote_relaxed", 3.5)
         vote_threshold = config["poster_set"].get("vote_threshold", 5.0)
         cache_key_name = "season_average"
     else:
+        vote_relaxed = config["poster_set"].get("vote_relaxed", 3.5)
         vote_threshold = config["poster_set"].get("vote_threshold", 5.0)
         cache_key_name = "poster_average"
     cached_votes = 0
@@ -220,15 +209,23 @@ def smart_asset_upgrade(
         "new_votes": new_votes,
         "cached_votes": cached_votes,
         "vote_threshold": vote_threshold,
+        "vote_relaxed": vote_relaxed,
         "asset_path_exists": asset_path.exists(),
         "new_image_path_exists": new_image_path.exists() if new_image_path else False
     }
-    if not asset_path.exists() and cached_votes == 0:
+    if not asset_path.exists():
         return True, "NO_EXISTING_ASSET", context
-    if cached_votes < vote_threshold and new_votes >= vote_threshold:
-        return True, "UPGRADE_THRESHOLD", context
-    if new_votes > cached_votes:
+    if cached_votes in (None, 0):
+        return True, "NO_EXISTING_ASSET", context
+    if cached_votes < vote_threshold:
+        if new_votes >= vote_threshold:
+            return True, "UPGRADE_THRESHOLD", context
+        elif vote_relaxed <= new_votes < vote_threshold:
+            return True, "UPGRADE_RELAXED", context
+    if cached_votes > 0 and new_votes > cached_votes:
         return True, "UPGRADE_VOTES", context
+    if cached_votes >= vote_threshold and new_votes >= vote_threshold and new_votes > cached_votes:
+        return True, "UPGRADE_STRICT", context
     if new_image_path and new_image_path.exists():
         try:
             with Image.open(new_image_path) as img:
@@ -245,7 +242,7 @@ def smart_asset_upgrade(
     return False, "NO_UPGRADE_NEEDED", context
 
 async def download_poster(config, image_path, save_path, session=None, retries=3):
-    url = f"https://image.tmdb.org/t/p/original{image_path}"
+    url = f"https://image.tmdb.org/t/p/original{image_path or ''}"
     if session is None:
         return False, url, None, "HTTP session failed"
     last_exception = None

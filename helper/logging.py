@@ -45,7 +45,7 @@ def get_setup_logging(config):
     return logger
 
 def get_meta_banner(logger=None):
-    width=80
+    width = 80
     border = "=" * width
     title = " ".join("METAFUSION").center(width - 6)
     centered = f"| {title} |"
@@ -404,8 +404,8 @@ def log_builder_event(event, logger=None, **kwargs):
         "builder_no_asset_path": "[{media_type}] Asset path could not be determined for {full_title}{extra}. Skipping {asset_type} download...",
         "builder_no_suitable_asset": "[{media_type}] No suitable TMDb {asset_type} found for {full_title}{extra}. Skipping...",
         "builder_downloading_asset": "[{media_type}] Downloading {asset_type} for {full_title} from TMDb. Filesize: {filesize}",
-        "builder_asset_download_failed": "[{media_type}] New {asset_type} download failed for {full_title} from {url} (status: {status}) Error: {error}",
-        "builder_asset_upgraded": "[{media_type}] Upgraded for {asset_type} {full_title}: {reason} Filesize: {filesize}",
+        "builder_asset_download_failed": "[{media_type}] New {asset_type} download failed for {full_title} from (status: {status}) Error: {error}",
+        "builder_asset_upgraded": "[{media_type}] Upgraded {asset_type} for {full_title}: {reason} Filesize: {filesize}",
         "builder_no_upgrade_needed": "[{media_type}] No {asset_type} upgrade for {full_title}. Skipping {filesize} {asset_type} download...",
         "builder_no_image_for_compare": "[{media_type}] No image provided for comparison for {full_title}{extra}. Skipping detailed check...",
         "builder_error_image_compare": "[{media_type}] Failed to read temp image for comparison for {full_title}{extra}: {error}",
@@ -414,8 +414,8 @@ def log_builder_event(event, logger=None, **kwargs):
         "builder_no_season_details": "[{media_type}] No season details for {full_title} Season {season_number}. Skipping season poster asset...",
         "builder_no_suitable_asset_season": "[{media_type}] No suitable TMDb {asset_type} found for {full_title} Season {season_number}. Skipping...",
         "builder_downloading_asset_season": "[{media_type}] Downloading {asset_type} for {full_title} Season {season_number} from TMDb. Filesize: {filesize}",
-        "builder_asset_download_failed_season": "[{media_type}] {asset_type} download failed for {full_title} Season {season_number} from {url} (status: {status}) Error: {error}",
-        "builder_asset_upgraded_season": "[{media_type}] Upgraded for {asset_type} {full_title} Season {season_number}: {reason} Filesize: {filesize}",
+        "builder_asset_download_failed_season": "[{media_type}] {asset_type} download failed for {full_title} Season {season_number} from (status: {status}) Error: {error}",
+        "builder_asset_upgraded_season": "[{media_type}] Upgraded {asset_type} for {full_title} Season {season_number}: {reason} Filesize: {filesize}",
         "builder_no_upgrade_needed_season": "[{media_type}] No {asset_type} upgrade for {full_title} Season {season_number}. Skipping {filesize} {asset_type} download...",
         "builder_no_image_for_compare_season": "[{media_type}] No image provided for comparison for {full_title} Season {season_number}. Skipping detailed check...",
         "builder_error_image_compare_season": "[{media_type}] Failed to read temp image for comparison for {full_title} Season {season_number}: {error}",
@@ -456,9 +456,13 @@ def log_builder_event(event, logger=None, **kwargs):
         context = kwargs.get("context", {})
         asset_type = kwargs.get("asset_type", "")
         if status_code == "UPGRADE_VOTES":
-            reason = f"Vote average found: {context.get('new_votes')} (Cached: {context.get('cached_votes')}, Threshold: {context.get('vote_threshold')})"
+            reason = f"TMDb vote: {context.get('new_votes')} (Cached: {context.get('cached_votes')})"
+        elif status_code == "UPGRADE_STRICT":
+            reason = f"TMDb vote: {context.get('new_votes')} (Cached: {context.get('cached_votes')}, Threshold: {context.get('vote_threshold')})"
         elif status_code == "UPGRADE_THRESHOLD":
-            reason = f"Vote average threshold: {context.get('new_votes')} (Threshold: {context.get('vote_threshold')})"
+            reason = f"TMDb vote: {context.get('new_votes')} (Threshold: {context.get('vote_threshold')})"
+        elif status_code == "UPGRADE_RELAXED":
+            reason = f"TMDb vote: {context.get('new_votes')} (Relaxed: {context.get('vote_relaxed')})"
         elif status_code == "UPGRADE_DIMENSIONS":
             reason = f"New dimensions: {context.get('new_width')}x{context.get('new_height')}, Existing: {context.get('existing_width', '?')}x{context.get('existing_height', '?')}"
         else:
@@ -469,9 +473,13 @@ def log_builder_event(event, logger=None, **kwargs):
         context = kwargs.get("context", {})
         asset_type = kwargs.get("asset_type", "")
         if status_code == "UPGRADE_VOTES":
-            reason = f"Vote average found: {context.get('new_votes')} (Cached: {context.get('cached_votes')}, Threshold: {context.get('vote_threshold')})"
+            reason = f"TMDb vote: {context.get('new_votes')} (Cached: {context.get('cached_votes')})"
+        elif status_code == "UPGRADE_STRICT":
+            reason = f"TMDb vote: {context.get('new_votes')} (Cached: {context.get('cached_votes')}, Threshold: {context.get('vote_threshold')})"
         elif status_code == "UPGRADE_THRESHOLD":
-            reason = f"Vote average threshold: {context.get('new_votes')} (Threshold: {context.get('vote_threshold')})"
+            reason = f"TMDb vote: {context.get('new_votes')} (Threshold: {context.get('vote_threshold')})"
+        elif status_code == "UPGRADE_RELAXED":
+            reason = f"TMDb vote: {context.get('new_votes')} (Relaxed: {context.get('vote_relaxed')})"
         elif status_code == "UPGRADE_DIMENSIONS":
             reason = f"New dimensions: {context.get('new_width')}x{context.get('new_height')}, Existing: {context.get('existing_width', '?')}x{context.get('existing_height', '?')}"
         else:
@@ -649,13 +657,15 @@ def log_library_summary(
             f"Poster - Downloaded: {library_summary.get('poster_downloaded', 0)}, "
             f"Upgraded: {library_summary.get('poster_upgraded', 0)}, "
             f"Skipped: {library_summary.get('poster_skipped', 0)}, "
-            f"Missing: {library_summary.get('poster_missing', 0)}", box_width))
+            f"Missing: {library_summary.get('poster_missing', 0)}, "
+            f"Failed: {library_summary.get('poster_failed', 0)}", box_width))
     if feature_flags and feature_flags.get("background", False) and (library_type in ("movie", "tv", "show")):
         lines.extend(box_line(
             f"Background - Downloaded: {library_summary.get('background_downloaded', 0)}, "
             f"Upgraded: {library_summary.get('background_upgraded', 0)}, "
             f"Skipped: {library_summary.get('background_skipped', 0)}, "
-            f"Missing: {library_summary.get('background_missing', 0)}", box_width))
+            f"Missing: {library_summary.get('background_missing', 0)}, "
+            f"Failed: {library_summary.get('background_failed', 0)}", box_width))
     if (
         feature_flags and feature_flags.get("season", False)
         and library_type in ("tv", "show")
@@ -663,14 +673,16 @@ def log_library_summary(
             library_summary.get('season_poster_downloaded', 0) > 0 or
             library_summary.get('season_poster_upgraded', 0) > 0 or
             library_summary.get('season_poster_skipped', 0) > 0 or
-            library_summary.get('season_poster_missing', 0) > 0
+            library_summary.get('season_poster_missing', 0) > 0 or
+            library_summary.get('season_poster_failed', 0) > 0
         )
     ):
         lines.extend(box_line(
-            f"Season Poster - Downloaded: {library_summary.get('season_poster_downloaded', 0)}, "
+            f"Season - Downloaded: {library_summary.get('season_poster_downloaded', 0)}, "
             f"Upgraded: {library_summary.get('season_poster_upgraded', 0)}, "
             f"Skipped: {library_summary.get('season_poster_skipped', 0)}, "
-            f"Missing: {library_summary.get('season_poster_missing', 0)}", box_width))
+            f"Missing: {library_summary.get('season_poster_missing', 0)}, "
+            f"Failed: {library_summary.get('season_poster_failed', 0)}", box_width))
 
     asset_summaries = []
     if feature_flags and feature_flags.get("poster") and poster_size > 0:
@@ -757,14 +769,16 @@ def log_final_summary(
                 f"Poster - Downloaded: {libsum.get('poster_downloaded', 0)}, "
                 f"Upgraded: {libsum.get('poster_upgraded', 0)}, "
                 f"Skipped: {libsum.get('poster_skipped', 0)}, "
-                f"Missing: {libsum.get('poster_missing', 0)}", box_width))
+                f"Missing: {libsum.get('poster_missing', 0)}, "
+                f"Failed: {libsum.get('poster_failed', 0)}", box_width))
 
         if feature_flags and feature_flags.get("background", False) and library_type in ("movie", "tv", "show"):
             lines.extend(box_line(
                 f"Background - Downloaded: {libsum.get('background_downloaded', 0)}, "
                 f"Upgraded: {libsum.get('background_upgraded', 0)}, "
                 f"Skipped: {libsum.get('background_skipped', 0)}, "
-                f"Missing: {libsum.get('background_missing', 0)}", box_width))
+                f"Missing: {libsum.get('background_missing', 0)}, "
+                f"Failed: {libsum.get('background_failed', 0)}", box_width))
 
         if (
             feature_flags and feature_flags.get("season", False)
@@ -777,17 +791,18 @@ def log_final_summary(
             )
         ):
             lines.extend(box_line(
-                f"Season Poster - Downloaded: {libsum.get('season_poster_downloaded', 0)}, "
+                f"Season - Downloaded: {libsum.get('season_poster_downloaded', 0)}, "
                 f"Upgraded: {libsum.get('season_poster_upgraded', 0)}, "
                 f"Skipped: {libsum.get('season_poster_skipped', 0)}, "
-                f"Missing: {libsum.get('season_poster_missing', 0)}", box_width))
+                f"Missing: {libsum.get('season_poster_missing', 0)}, "
+                f"Failed: {libsum.get('season_poster_failed', 0)}", box_width))
 
         lines.extend(box_line(
-            f"Assets - {human_readable_size(asset_size)} / {human_readable_size(total_asset_size)}", box_width))
+            f"Assets - {human_readable_size(asset_size)} Downloaded / {human_readable_size(total_asset_size)} Total", box_width))
         lines.append(border)
 
     if cleanup_title_orphans:
-        lines.extend(box_line(f"Cleanup - {orphans_removed} Items Removed", box_width))
+        lines.extend(box_line(f"Cleanup - {orphans_removed} Titles Removed", box_width))
     if config["settings"].get("dry_run", False):
         lines.extend(box_line("[Dry Run] Completed. No files were written.", box_width))
     lines.append(border)
