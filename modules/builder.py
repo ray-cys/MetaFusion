@@ -153,8 +153,6 @@ async def build_movie(
             new_metadata[k] = writers if writers else []
         elif k == "producer.sync":
             new_metadata[k] = producers if producers else []
-        elif k == "collection.sync":
-            new_metadata[k] = cleaned_collection or ""
         else:
             new_metadata[k] = "" 
 
@@ -221,7 +219,7 @@ async def build_movie(
 
     if metadata_changed:
         cache_key = f"movie:{title}:{year}"
-        await meta_cache_async(cache_key, tmdb_id, title, year, "movie", collection_id=collection_id)
+        await meta_cache_async(cache_key, tmdb_id, title, year, "movie", collection_id=collection_id, collection_name=cleaned_collection)
         log_builder_event("builder_metadata_cached", media_type="Movie", full_title=full_title, cache_key=cache_key)
 
     async def process_poster():
