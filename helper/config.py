@@ -48,6 +48,15 @@ DEFAULT_CONFIG = {
         "vote_relaxed": 3.5,
         "vote_threshold": 5.0
     },
+    "season_set": {
+        "max_width": 2000,
+        "max_height": 3000,
+        "min_width": 1000,
+        "min_height": 1500,
+        "prefer_vote": 5.0,
+        "vote_relaxed": 0.5,
+        "vote_threshold": 3.0
+    },
     "background_set": {
         "max_width": 3840,
         "max_height": 2160,
