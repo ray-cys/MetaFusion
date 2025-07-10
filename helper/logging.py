@@ -649,7 +649,7 @@ def log_library_summary(
     if library_summary:
         lines.extend(box_line(
             f"Metadata - Downloaded: {library_summary.get('meta_downloaded', 0)}, "
-            f"Upgraded: {library_summary.get('meta_upgraded', 0)}, "
+            f"Updated: {library_summary.get('meta_upgraded', 0)}, "
             f"Skipped: {library_summary.get('meta_skipped', 0)}", box_width))
     if run_metadata:
         meta_line = (
@@ -764,7 +764,7 @@ def log_final_summary(
         lines.extend(box_line(summary_line, box_width))
         lines.extend(box_line(
             f"Metadata - Downloaded: {libsum.get('meta_downloaded', 0)}, "
-            f"Upgraded: {libsum.get('meta_upgraded', 0)}, "
+            f"Updated: {libsum.get('meta_upgraded', 0)}, "
             f"Skipped: {libsum.get('meta_skipped', 0)}", box_width))
         percent_incomplete = summary.get('percent_incomplete', 100 - summary['percent_complete'])
         lines.extend(box_line(
