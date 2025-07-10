@@ -308,23 +308,28 @@ def connect_plex_library(config, selected_libraries=None):
 
     libraries = [{"title": section.title, "type": section.TYPE} for section in sections]
     all_libraries = libraries.copy()
-    library_names = ", ".join(lib["title"] for lib in libraries)
-    log_plex_event("plex_detected_libraries", libraries=library_names)
+    detected_names = [lib["title"] for lib in libraries]
+
+    filtered_sections = []
+    filtered_libraries = []
+    skipped_libraries = []
+    for section, lib in zip(sections, libraries):
+        if lib['title'] in selected_libraries:
+            filtered_sections.append(section)
+            filtered_libraries.append(lib)
+        else:
+            skipped_libraries.append(lib['title'])
+    sections = filtered_sections
+    libraries = filtered_libraries
+
+    log_plex_event(
+        "plex_detected_and_skipped_libraries",
+        detected=", ".join(detected_names) if detected_names else "None",
+        skipped=", ".join(skipped_libraries) if skipped_libraries else "None"
+    )
     if not sections:
         log_plex_event("plex_no_libraries_found")
         sys.exit(0)
-    
-    if selected_libraries is not None:
-        filtered_sections = []
-        filtered_libraries = []
-        for section, lib in zip(sections, libraries):
-            if lib['title'] in selected_libraries:
-                filtered_sections.append(section)
-                filtered_libraries.append(lib)
-            else:
-                log_plex_event("plex_skipping_library", library=lib['title'])
-        sections = filtered_sections
-        libraries = filtered_libraries
 
     return plex, sections, libraries, selected_libraries, all_libraries
 
