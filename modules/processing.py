@@ -66,17 +66,13 @@ async def process_library(
     if library_filesize is not None:
         library_filesize[library_name] = 0
 
-    completed = 0
-    incomplete = 0
-    season_count = 0
-    episode_count = 0
     poster_size = background_size = season_poster_size = total_asset_size = 0
-    counters = {
-        "meta_downloaded": 0, "meta_upgraded": 0, "meta_skipped": 0,
-        "poster_downloaded": 0, "poster_upgraded": 0, "poster_skipped": 0, "poster_missing": 0, "poster_failed": 0,
-        "background_downloaded": 0, "background_upgraded": 0, "background_skipped": 0, "background_missing": 0, "background_failed": 0,
-        "season_poster_downloaded": 0, "season_poster_upgraded": 0, "season_poster_skipped": 0, "season_poster_missing": 0, "season_poster_failed": 0,
-    }
+    completed = incomplete = 0
+    season_count = episode_count = 0
+    meta_downloaded = meta_upgraded = meta_skipped = 0
+    poster_downloaded = poster_upgraded = poster_skipped = poster_missing = poster_failed = 0
+    background_downloaded = background_upgraded = background_skipped = background_missing = background_failed = 0
+    season_poster_downloaded = season_poster_upgraded = season_poster_skipped = season_poster_missing = season_poster_failed = 0
 
     try:
         library_name = library_section.title
@@ -127,7 +123,11 @@ async def process_library(
         async def process_and_collect(item):
             nonlocal poster_size, background_size, season_poster_size, total_asset_size
             nonlocal completed, incomplete, season_count, episode_count
-            
+            nonlocal meta_downloaded, meta_upgraded, meta_skipped
+            nonlocal poster_downloaded, poster_upgraded, poster_skipped, poster_missing, poster_failed
+            nonlocal background_downloaded, background_upgraded, background_skipped, background_missing, background_failed
+            nonlocal season_poster_downloaded, season_poster_upgraded, season_poster_skipped, season_poster_missing, season_poster_failed
+
             stats = await process_item(
                 plex_item=item, consolidated_metadata=consolidated_metadata, config=config,
                 feature_flags=feature_flags, existing_yaml_data=existing_yaml_data,
@@ -137,37 +137,50 @@ async def process_library(
             if stats and isinstance(stats, dict):
                 all_stats.append(stats)
 
-                action_mappings = [
-                    ("metadata_action", {
-                        "downloaded": "meta_downloaded",
-                        "upgraded": "meta_upgraded",
-                        "skipped": "meta_skipped"
-                    }),
-                    ("poster_action", {
-                        "downloaded": "poster_downloaded",
-                        "upgraded": "poster_upgraded",
-                        "skipped": "poster_skipped",
-                        "missing": "poster_missing",
-                        "failed": "poster_failed"
-                    }),
-                    ("background_action", { 
-                        "downloaded": "background_downloaded",
-                        "upgraded": "background_upgraded",
-                        "skipped": "background_skipped",
-                        "missing": "background_missing",
-                        "failed": "background_failed"
-                    })
-                ]
-                for stat_key, mapping in action_mappings:
-                    action = stats.get(stat_key)
-                    if action in mapping:
-                        counters[mapping[action]] += 1
+                action = stats.get("metadata_action")
+                if action == "downloaded":
+                    meta_downloaded += 1
+                elif action == "upgraded":
+                    meta_upgraded += 1
+                elif action == "skipped":
+                    meta_skipped += 1
+
+                action = stats.get("poster_action")
+                if action == "downloaded":
+                    poster_downloaded += 1
+                elif action == "upgraded":
+                    poster_upgraded += 1
+                elif action == "skipped":
+                    poster_skipped += 1
+                elif action == "missing":
+                    poster_missing += 1
+                elif action == "failed":
+                    poster_failed += 1
+
+                action = stats.get("background_action")
+                if action == "downloaded":
+                    background_downloaded += 1
+                elif action == "upgraded":
+                    background_upgraded += 1
+                elif action == "skipped":
+                    background_skipped += 1
+                elif action == "missing":
+                    background_missing += 1
+                elif action == "failed":
+                    background_failed += 1
 
                 season_actions = stats.get("season_poster_actions", {})
                 for season_action in season_actions.values():
-                    key = f"season_poster_{season_action}"
-                    if key in counters:
-                        counters[key] += 1
+                    if season_action == "downloaded":
+                        season_poster_downloaded += 1
+                    elif season_action == "upgraded":
+                        season_poster_upgraded += 1
+                    elif season_action == "skipped":
+                        season_poster_skipped += 1
+                    elif season_action == "missing":
+                        season_poster_missing += 1
+                    elif season_action == "failed":
+                        season_poster_failed += 1
 
                 if feature_flags["poster"]:
                     poster_size += stats.get("poster", {}).get("size", 0)
@@ -220,13 +233,13 @@ async def process_library(
         percent_incomplete = round((incomplete / total_items) * 100, 2) if total_items else 0.0
 
         library_summary = {
-            "meta_downloaded": counters["meta_downloaded"], "meta_upgraded": counters["meta_upgraded"], "meta_skipped": counters["meta_skipped"],
-            "poster_downloaded": counters["poster_downloaded"], "poster_upgraded": counters["poster_upgraded"], "poster_skipped": counters["poster_skipped"],
-            "poster_failed": counters["poster_failed"], "poster_missing": counters["poster_missing"],
-            "background_downloaded": counters["background_downloaded"], "background_upgraded": counters["background_upgraded"], "background_skipped": counters["background_skipped"],
-            "background_failed": counters["background_failed"], "background_missing": counters["background_missing"],
-            "season_poster_downloaded": counters["season_poster_downloaded"], "season_poster_upgraded": counters["season_poster_upgraded"], "season_poster_skipped": counters["season_poster_skipped"],
-            "season_poster_failed": counters["season_poster_failed"], "season_poster_missing": counters["season_poster_missing"]
+            "meta_downloaded": meta_downloaded, "meta_upgraded": meta_upgraded, "meta_skipped": meta_skipped,
+            "poster_downloaded": poster_downloaded, "poster_upgraded": poster_upgraded, "poster_skipped": poster_skipped,
+            "poster_failed": poster_failed, "poster_missing": poster_missing,
+            "background_downloaded": background_downloaded, "background_upgraded": background_upgraded, "background_skipped": background_skipped,
+            "background_failed": background_failed, "background_missing": background_missing,
+            "season_poster_downloaded": season_poster_downloaded, "season_poster_upgraded": season_poster_upgraded, "season_poster_skipped": season_poster_skipped,
+            "season_poster_failed": season_poster_failed, "season_poster_missing": season_poster_missing
         }
 
         log_library_summary(
