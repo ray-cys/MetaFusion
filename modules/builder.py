@@ -5,8 +5,8 @@ from helper.cache import meta_cache_async
 from helper.plex import get_plex_country
 from helper.tmdb import tmdb_api_request, tmdb_response_cache
 from modules.utils import (
-    smart_meta_update, get_meta_field, recursive_season_diff, get_best_poster, get_best_background, 
-    smart_asset_upgrade, asset_temp_path, download_poster, get_asset_path
+    smart_meta_update, get_meta_field, recursive_season_diff, get_best_poster, get_best_season, get_best_background,
+    smart_asset_upgrade, smart_season_asset_upgrade, asset_temp_path, download_poster, get_asset_path
 )
 
 async def build_movie(
@@ -229,6 +229,7 @@ async def build_movie(
         nonlocal poster_action
         if not feature_flags or not feature_flags.get("poster", True):
             result["poster"]["size"] = poster_size
+            poster_action = "skipped"
             return
         if not movie_path:
             log_builder_event("builder_no_asset_path", media_type="Movie", full_title=full_title, asset_type="poster", extra="")
@@ -239,6 +240,7 @@ async def build_movie(
         if feature_flags.get("dry_run", False):
             log_builder_event("builder_dry_run_asset", media_type="Movie", asset_type="poster", full_title=full_title)
             result["poster"]["size"] = poster_size
+            poster_action = "skipped"
             return
         
         preferred_language = config["tmdb"].get("language", "en").split("-")[0]
@@ -271,6 +273,7 @@ async def build_movie(
                 should_upgrade, status_code, context = smart_asset_upgrade(
                     config, asset_path, best, new_image_path=temp_path, asset_type="poster", cache_key=cache_key
                 )
+                await meta_cache_async(cache_key, tmdb_id, title, year, "movie", poster_average=best.get("vote_average", 0))
                 if should_upgrade:
                     asset_path.parent.mkdir(parents=True, exist_ok=True)
                     shutil.move(temp_path, asset_path)
@@ -310,6 +313,7 @@ async def build_movie(
         nonlocal background_action
         if not feature_flags or not feature_flags.get("background", True):
             result["background"]["size"] = background_size
+            background_action = "skipped"
             return
         if not movie_path:
             log_builder_event("builder_no_asset_path", media_type="Movie", full_title=full_title, asset_type="background", extra="")
@@ -320,6 +324,7 @@ async def build_movie(
         if feature_flags.get("dry_run", False):
             log_builder_event("builder_dry_run_asset", media_type="Movie", asset_type="background", full_title=full_title)
             result["background"]["size"] = background_size
+            background_action = "skipped"
             return
     
         preferred_language = config["tmdb"].get("language", "en").split("-")[0]
@@ -352,6 +357,7 @@ async def build_movie(
                 should_upgrade, status_code, context = smart_asset_upgrade(
                     config, asset_path, best, new_image_path=temp_path, asset_type="background", cache_key=cache_key
                 )
+                await meta_cache_async(cache_key, tmdb_id, title, year, "movie", bg_average=best.get("vote_average", 0))
                 if should_upgrade:
                     asset_path.parent.mkdir(parents=True, exist_ok=True)
                     shutil.move(temp_path, asset_path)
@@ -742,6 +748,7 @@ async def build_tv(
         nonlocal poster_action
         if not feature_flags or not feature_flags.get("poster", True):
             result["poster"]["size"] = poster_size
+            poster_action = "skipped"
             return
         if not show_path:
             log_builder_event("builder_no_asset_path", media_type="TV Show", full_title=full_title, asset_type="poster", extra="")
@@ -752,6 +759,7 @@ async def build_tv(
         if feature_flags.get("dry_run", False):
             log_builder_event("builder_dry_run_asset", media_type="TV Show", asset_type="poster", full_title=full_title)
             result["poster"]["size"] = poster_size
+            poster_action = "skipped"
             return
             
         preferred_language = config["tmdb"].get("language", "en").split("-")[0]
@@ -782,9 +790,9 @@ async def build_tv(
                 poster_action = "failed"
             if success and temp_path.exists():
                 should_upgrade, status_code, context = smart_asset_upgrade(
-                    config, asset_path, best, new_image_path=temp_path, asset_type="poster", cache_key=cache_key,
-                    season_number=season_number
+                    config, asset_path, best, new_image_path=temp_path, asset_type="poster", cache_key=cache_key
                 )
+                await meta_cache_async(cache_key, tmdb_id, title, year, "tv", poster_average=best.get("vote_average", 0))
                 if should_upgrade:
                     asset_path.parent.mkdir(parents=True, exist_ok=True)
                     shutil.move(temp_path, asset_path)
@@ -824,6 +832,7 @@ async def build_tv(
         nonlocal background_action
         if not config["assets"].get("run_background", True):
             result["background"]["size"] = background_size
+            background_action = "skipped"
             return
         if not show_path:
             log_builder_event("builder_no_asset_path", media_type="TV Show", full_title=full_title, asset_type="background", extra="")
@@ -834,6 +843,7 @@ async def build_tv(
         if feature_flags.get("dry_run", False):
             log_builder_event("builder_dry_run_asset", media_type="TV Show", asset_type="background", full_title=full_title)
             result["background"]["size"] = background_size
+            background_action = "skipped"
             return
             
         images = get_meta_field(details, "backdrops", [], path=["images"])
@@ -864,9 +874,9 @@ async def build_tv(
                 background_action = "failed"
             if success and temp_path.exists():
                 should_upgrade, status_code, context = smart_asset_upgrade(
-                    config, asset_path, best, new_image_path=temp_path, asset_type="background", cache_key=cache_key,
-                    season_number=season_number
+                    config, asset_path, best, new_image_path=temp_path, asset_type="background", cache_key=cache_key
                 )
+                await meta_cache_async(cache_key, tmdb_id, title, year, "tv", bg_average=best.get("vote_average", 0))
                 if should_upgrade:
                     asset_path.parent.mkdir(parents=True, exist_ok=True)
                     shutil.move(temp_path, asset_path)
@@ -904,9 +914,9 @@ async def build_tv(
     async def process_season_poster(season_info):
         season_poster_size = 0
         season_number = season_info.get("season_number")
-        nonlocal season_poster_actions
-        season_poster_actions[season_number] = "skipped"
         if not season_number or season_number == 0:
+            nonlocal season_poster_actions
+            season_poster_actions[season_number] = "skipped"
             return
         
         if not show_path:
@@ -917,6 +927,7 @@ async def build_tv(
         if feature_flags.get("dry_run", False):
             log_builder_event("builder_dry_run_asset_season", media_type="TV Show", season_number=season_number, asset_type="poster", full_title=full_title)
             result["season_posters"][season_number] = season_poster_size
+            season_poster_actions[season_number] = "skipped"
             return
         
         season_key = f"tv/{tmdb_id}/season/{season_number}"
@@ -929,7 +940,7 @@ async def build_tv(
         preferred_language = config["tmdb"].get("language", "en").split("-")[0]
         images = get_meta_field(season_details, "posters", [], path=["images"])
         fallback = config["tmdb"].get("fallback", [])
-        best = get_best_poster(config, images, preferred_language=preferred_language, fallback=fallback)
+        best = get_best_season(config, images, preferred_language=preferred_language, fallback=fallback)
         if not best:
             log_builder_event(
                 "builder_no_suitable_asset_season", media_type="TV Show", asset_type="poster",
@@ -954,21 +965,19 @@ async def build_tv(
                 )
                 season_poster_actions[season_number] = "failed"
             if success and temp_path.exists():
-                should_upgrade, status_code, context = smart_asset_upgrade(
+                should_upgrade, status_code, context = smart_season_asset_upgrade(
                     config, asset_path, best, new_image_path=temp_path, asset_type="season", cache_key=cache_key, 
                     season_number=season_number
                 )
+                await meta_cache_async(cache_key, tmdb_id, title, year, "tv", season_number=season_number, season_average=best.get("vote_average", 0))
                 if should_upgrade:
                     asset_path.parent.mkdir(parents=True, exist_ok=True)
                     shutil.move(temp_path, asset_path)
                     if temp_path.exists():
                         temp_path.unlink(missing_ok=True)
                     season_poster_size = asset_path.stat().st_size if asset_path.exists() else 0
-                    await meta_cache_async(
-                        cache_key, tmdb_id, title, year, "tv",
-                        season_number=season_number, season_average=best.get("vote_average", 0)
-                    )
-                    if status_code == "NO_EXISTING_ASSET":
+                    await meta_cache_async(cache_key, tmdb_id, title, year, "tv", season_number=season_number, season_average=best.get("vote_average", 0))
+                    if status_code == "NO_EXISTING_ASSET_SEASON":
                         log_builder_event(
                             "builder_downloading_asset_season", media_type="TV Show", asset_type="poster",
                             full_title=full_title, season_number=season_number, filesize=season_poster_size
@@ -984,14 +993,8 @@ async def build_tv(
                     existing_assets.add(str(asset_path.resolve()))
                 else:
                     season_poster_size = asset_path.stat().st_size if asset_path.exists() else 0
-                    season_status_map = {
-                        "NO_UPGRADE_NEEDED": "NO_UPGRADE_NEEDED_SEASON",
-                        "NO_IMAGE_FOR_COMPARE": "NO_IMAGE_FOR_COMPARE_SEASON",
-                        "ERROR_IMAGE_COMPARE": "ERROR_IMAGE_COMPARE_SEASON",
-                    }
-                    season_status_code = season_status_map.get(status_code, status_code)
                     log_asset_status(
-                        season_status_code, media_type="TV Show", asset_type="poster", full_title=full_title,
+                        status_code, media_type="TV Show", asset_type="poster", full_title=full_title,
                         filesize=season_poster_size, error=context.get("error") if context else None, extra="", season_number=season_number
                     )
                     season_poster_actions[season_number] = "skipped"

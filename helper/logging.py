@@ -406,7 +406,8 @@ def log_builder_event(event, logger=None, **kwargs):
         "builder_downloading_asset": "[{media_type}] Downloading {asset_type} for {full_title} from TMDb. Filesize: {filesize}",
         "builder_asset_download_failed": "[{media_type}] New {asset_type} download failed for {full_title} from (status: {status}) Error: {error}",
         "builder_asset_upgraded": "[{media_type}] Upgraded {asset_type} for {full_title}: {reason} Filesize: {filesize}",
-        "builder_no_upgrade_needed": "[{media_type}] No {asset_type} upgrade for {full_title}. Skipping {filesize} {asset_type} download...",
+        "builder_already_up_to_date": "[{media_type}] No {asset_type} download for {full_title} needed. Skipping {filesize} {asset_type} download...",
+        "builder_no_upgrade_needed": "[{media_type}] No {asset_type} upgrade for {full_title} needed. Skipping {filesize} {asset_type} download...",
         "builder_no_image_for_compare": "[{media_type}] No image provided for comparison for {full_title}{extra}. Skipping detailed check...",
         "builder_error_image_compare": "[{media_type}] Failed to read temp image for comparison for {full_title}{extra}: {error}",
         "builder_dry_run_asset_season": "[Dry Run] Would build {asset_type} asset for {media_type} Season {season_number}: {full_title}",
@@ -416,7 +417,8 @@ def log_builder_event(event, logger=None, **kwargs):
         "builder_downloading_asset_season": "[{media_type}] Downloading {asset_type} for {full_title} Season {season_number} from TMDb. Filesize: {filesize}",
         "builder_asset_download_failed_season": "[{media_type}] {asset_type} download failed for {full_title} Season {season_number} from (status: {status}) Error: {error}",
         "builder_asset_upgraded_season": "[{media_type}] Upgraded {asset_type} for {full_title} Season {season_number}: {reason} Filesize: {filesize}",
-        "builder_no_upgrade_needed_season": "[{media_type}] No {asset_type} upgrade for {full_title} Season {season_number}. Skipping {filesize} {asset_type} download...",
+        "builder_already_up_to_date_season": "[{media_type}] No {asset_type} download for {full_title} Season {season_number} needed. Skipping {filesize} {asset_type} download...",
+        "builder_no_upgrade_needed_season": "[{media_type}] No {asset_type} upgrade for {full_title} Season {season_number} needed. Skipping {filesize} {asset_type} download...",
         "builder_no_image_for_compare_season": "[{media_type}] No image provided for comparison for {full_title} Season {season_number}. Skipping detailed check...",
         "builder_error_image_compare_season": "[{media_type}] Failed to read temp image for comparison for {full_title} Season {season_number}: {error}",
     }
@@ -435,6 +437,7 @@ def log_builder_event(event, logger=None, **kwargs):
         "builder_downloading_asset": "debug",
         "builder_asset_download_failed": "error",
         "builder_asset_upgraded": "info",
+        "builder_already_up_to_date": "info",
         "builder_no_upgrade_needed": "info",
         "builder_no_image_for_compare": "warning",
         "builder_error_image_compare": "error",
@@ -444,6 +447,7 @@ def log_builder_event(event, logger=None, **kwargs):
         "builder_no_suitable_asset_season": "info",
         "builder_asset_download_failed_season": "error",
         "builder_asset_upgraded_season": "info",
+        "builder_already_up_to_date_season": "info",
         "builder_no_upgrade_needed_season": "info",
         "builder_no_image_for_compare_season": "warning",
         "builder_error_image_compare_season": "error",
@@ -472,15 +476,17 @@ def log_builder_event(event, logger=None, **kwargs):
         status_code = kwargs.get("status_code")
         context = kwargs.get("context", {})
         asset_type = kwargs.get("asset_type", "")
-        if status_code == "UPGRADE_VOTES":
+        if status_code == "UPGRADE_VOTES_SEASON":
             reason = f"TMDb vote: {context.get('new_votes')} (Cached: {context.get('cached_votes')})"
-        elif status_code == "UPGRADE_STRICT":
+        elif status_code == "UPGRADE_ZERO_VOTE_SEASON":
+            reason = f"(Cached: {context.get('cached_votes')}) Upgrade dimensions {context.get('new_width')}x{context.get('new_height')}"
+        elif status_code == "UPGRADE_STRICT_SEASON":
             reason = f"TMDb vote: {context.get('new_votes')} (Cached: {context.get('cached_votes')}, Threshold: {context.get('vote_threshold')})"
-        elif status_code == "UPGRADE_THRESHOLD":
+        elif status_code == "UPGRADE_THRESHOLD_SEASON":
             reason = f"TMDb vote: {context.get('new_votes')} (Threshold: {context.get('vote_threshold')})"
-        elif status_code == "UPGRADE_RELAXED":
+        elif status_code == "UPGRADE_RELAXED_SEASON":
             reason = f"TMDb vote: {context.get('new_votes')} (Relaxed: {context.get('vote_relaxed')})"
-        elif status_code == "UPGRADE_DIMENSIONS":
+        elif status_code == "UPGRADE_DIMENSIONS_SEASON":
             reason = f"New dimensions: {context.get('new_width')}x{context.get('new_height')}, Existing: {context.get('existing_width', '?')}x{context.get('existing_height', '?')}"
         else:
             reason = ""
@@ -506,9 +512,11 @@ def log_asset_status(
     error=None, extra=None, season_number=None
 ):
     event_map = {
+        "ALREADY_UP_TO_DATE": "builder_already_up_to_date",
         "NO_UPGRADE_NEEDED": "builder_no_upgrade_needed",
         "NO_IMAGE_FOR_COMPARE": "builder_no_image_for_compare",
         "ERROR_IMAGE_COMPARE": "builder_error_image_compare",
+        "ALREADY_UP_TO_DATE_SEASON": "builder_already_up_to_date_season",
         "NO_UPGRADE_NEEDED_SEASON": "builder_no_upgrade_needed_season",
         "NO_IMAGE_FOR_COMPARE_SEASON": "builder_no_image_for_compare_season",
         "ERROR_IMAGE_COMPARE_SEASON": "builder_error_image_compare_season",
@@ -631,7 +639,7 @@ def log_library_summary(
         f"| {title.center(box_width - 4)} |",
         header,
         (
-            f"| {library_name}: Processed Titles: {total_items}"
+            f"| {library_name} - Processed: {total_items} Titles"
             + (
                 f" | Seasons: {season_count or 0} | Episodes: {episode_count or 0}"
                 if library_type in ("tv", "show") and (season_count is not None or episode_count is not None)
@@ -721,10 +729,12 @@ def log_final_summary(
         border
     ]
     minutes, seconds = divmod(int(elapsed_time), 60)
-    lines.extend(box_line(f"Processing completed in {minutes} mins {seconds} secs.", box_width))
+    lines.extend(box_line(f"Processing Completed in {minutes} mins {seconds} secs.", box_width))
+    processed_libraries = [lib["title"] for lib in libraries if lib["title"] in selected_libraries]
     skipped_libraries = [lib["title"] for lib in libraries if lib["title"] not in selected_libraries]
     lines.extend(box_line(
-        f"Libraries processed: {len(library_item_counts)} | Skipped: {', '.join(skipped_libraries) if skipped_libraries else 'None'}",
+        f"Libraries Processed: {', '.join(processed_libraries) if processed_libraries else 'None'} ({len(processed_libraries)})"
+        f" | Skipped: {', '.join(skipped_libraries) if skipped_libraries else 'None'} ({len(skipped_libraries)})",
         box_width
     ))
 
@@ -747,7 +757,7 @@ def log_final_summary(
         season_count = summary.get("season_count")
         episode_count = summary.get("episode_count")
         summary_line = (
-            f"{lib}: Processed {summary['total_items']} Titles"
+            f"{lib} - Processed {summary['total_items']} Titles"
             + (
                 f" | Seasons: {season_count or 0} | Episodes: {episode_count or 0}"
                 if library_type in ("tv", "show") and (season_count is not None or episode_count is not None)
