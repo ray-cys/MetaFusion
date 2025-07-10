@@ -5,7 +5,6 @@ metafusion_run: true
 
 # Dry run and logging configuration
 settings:
-  schedule: "0 3 * * *"
   dry_run: false
   log_level: "INFO"
 
@@ -55,6 +54,16 @@ poster_set:
   vote_relaxed: 3.5
   vote_threshold: 5.0
 
+# Season poster selection preferences (Only if run_season is true)
+season_set:
+  max_width: 2000
+  max_height: 3000
+  min_width: 1000
+  min_height: 1500
+  prefer_vote: 5.0
+  vote_relaxed: 0.5
+  vote_threshold: 3.0 
+  
 # Background selection preferences (Only if run_background is true)
 background_set:
   max_width: 3840

@@ -20,6 +20,10 @@ def save_cache(cache):
     with open(CACHE_FILE, "w", encoding="utf-8") as f:
         json.dump(cache, f, indent=2, ensure_ascii=False)
     log_cache_event("cache_saved", count=len(cache), cache_file=CACHE_FILE)
+    for entry in cache.values():
+        if entry.get("media_type") == "tv":
+            entry.pop("season_average", None)
+            entry.pop("season_number", None)
 
 cache_lock = asyncio.Lock()
 async def meta_cache_async(cache_key, tmdb_id, title, year, media_type, **kwargs):
@@ -31,8 +35,15 @@ async def meta_cache_async(cache_key, tmdb_id, title, year, media_type, **kwargs
         entry["year"] = year
         entry["media_type"] = media_type
         entry["last_updated"] = datetime.now().isoformat()
-        for k, v in kwargs.items():
-            entry[k] = v
+        season_number = kwargs.pop("season_number", None)
+        if season_number is not None:
+            seasons = entry.setdefault("seasons", {})
+            season_entry = seasons.setdefault(str(season_number), {})
+            for k, v in kwargs.items():
+                season_entry[k] = v
+        else:
+            for k, v in kwargs.items():
+                entry[k] = v
         cache[cache_key] = entry
         log_cache_event("cache_updated", cache_key=cache_key, media_type=media_type, title=title, year=year)
         save_cache(cache)
