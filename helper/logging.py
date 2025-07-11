@@ -726,11 +726,11 @@ def log_final_summary(
         border
     ]
     minutes, seconds = divmod(int(elapsed_time), 60)
-    lines.extend(box_line(f"Processing Completed in {minutes} mins {seconds} secs.", box_width))
+    lines.extend(box_line(f"Processing Completed - {minutes} mins {seconds} secs.", box_width))
     processed_libraries = [lib["title"] for lib in libraries if lib["title"] in selected_libraries]
     skipped_libraries = [lib["title"] for lib in libraries if lib["title"] not in selected_libraries]
     lines.extend(box_line(
-        f"Libraries Processed: {', '.join(processed_libraries) if processed_libraries else 'None'} ({len(processed_libraries)})"
+        f"Libraries Processed - {', '.join(processed_libraries) if processed_libraries else 'None'} ({len(processed_libraries)})"
         f" | Skipped: {', '.join(skipped_libraries) if skipped_libraries else 'None'} ({len(skipped_libraries)})",
         box_width
     ))
