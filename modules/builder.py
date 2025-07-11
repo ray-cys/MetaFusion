@@ -39,20 +39,17 @@ async def build_movie(
 
     if tmdb_id:
         mapping_id = int(tmdb_id)
-    else:
-        if imdb_id:
-            mapping_id = imdb_id
-        else:
-            if tmdb_id:
-                external_ids = await tmdb_api_request(
-                    config,
-                    f"movie/{tmdb_id}/external_ids"
-                )
-                if external_ids:
-                    imdb_id_from_tmdb = external_ids.get("imdb_id", "")
-                    if imdb_id_from_tmdb:
-                        mapping_id = imdb_id_from_tmdb
-
+    if not mapping_id and imdb_id:
+        mapping_id = imdb_id
+    if not mapping_id and tmdb_id:
+        external_ids = await tmdb_api_request(
+            config,
+            f"movie/{tmdb_id}/external_ids"
+        )
+        if external_ids:
+            imdb_id_from_tmdb = external_ids.get("imdb_id", "")
+            if imdb_id_from_tmdb:
+                mapping_id = imdb_id_from_tmdb
     if not mapping_id:
         log_builder_event("builder_missing_tmdb_and_imdb_id", media_type="Movie", full_title=full_title)
         metadata_action = "failed"
@@ -119,7 +116,7 @@ async def build_movie(
         "studio", "runtime", "tagline", "summary", "country.sync", "genre.sync"
     ]
     enhanced_fields = [
-        "cast.sync", "director.sync", "writer.sync", "producer.sync", "collection.sync"
+        "cast.sync", "director.sync", "writer.sync", "producer.sync"
     ]
     fields_to_write = basic_fields + (enhanced_fields if feature_flags.get("metadata_enhanced", True) else [])
 
@@ -156,7 +153,7 @@ async def build_movie(
         else:
             new_metadata[k] = "" 
 
-    expected_fields = [f for f in fields_to_write if f != "collection.sync"]
+    expected_fields = fields_to_write
     if ignored_fields is None:
         ignored_fields = set()
     filtered_fields = [f for f in expected_fields if f not in ignored_fields]
@@ -217,10 +214,18 @@ async def build_movie(
     if feature_flags.get("dry_run", False):
         log_builder_event("builder_dry_run_metadata", media_type="Movie", full_title=full_title)
 
+    cache_key = f"movie:{title}:{year}"    
     if metadata_changed:
-        cache_key = f"movie:{title}:{year}"
-        await meta_cache_async(cache_key, tmdb_id, title, year, "movie", collection_id=collection_id, collection_name=cleaned_collection)
+        await meta_cache_async(
+            cache_key, tmdb_id, title, year, "movie",
+            collection_id=collection_id, collection_name=cleaned_collection
+        )
         log_builder_event("builder_metadata_cached", media_type="Movie", full_title=full_title, cache_key=cache_key)
+    else:
+        await meta_cache_async(
+            cache_key, None, None, None, None,
+            collection_id=collection_id, collection_name=cleaned_collection, update_timestamp=False
+    )
 
     async def process_poster():
         poster_size = 0
@@ -621,7 +626,7 @@ async def build_tv(
             ep_runtime = get_meta_field(episode, "runtime", None)
     
             ep_basic_fields = ["sort_title", "original_title", "originally_available", "runtime", "summary"]
-            ep_enhanced_fields = ["cast.sync", "guest.sync", "director.sync", "writer.sync"]
+            ep_enhanced_fields = ["cast.sync", "guest", "director.sync", "writer.sync"]
             ep_fields_to_write = ep_basic_fields + (ep_enhanced_fields if config["metadata"].get("run_enhanced", True) else [])
     
             episode_dict = {}
@@ -634,10 +639,10 @@ async def build_tv(
                     episode_dict[k] = ep_runtime if ep_runtime is not None else ""
                 elif k == "summary":
                     episode_dict[k] = get_meta_field(episode, "overview", "") or ""
+                elif k == "guest":
+                    episode_dict[k] = ep_guest_stars if ep_guest_stars else []
                 elif k == "cast.sync":
                     episode_dict[k] = ep_cast if ep_cast else []
-                elif k == "guest.sync":
-                    episode_dict[k] = ep_guest_stars if ep_guest_stars else []
                 elif k == "director.sync":
                     episode_dict[k] = ep_directors if ep_directors else []
                 elif k == "writer.sync":
@@ -658,11 +663,6 @@ async def build_tv(
     for season_number, season_data in results:
         if season_data:
             seasons_data[season_number] = {k: v for k, v in season_data.items() if k != "season_details"}
-
-    external_ids = get_meta_field(details, "external_ids", {})
-    if mapping_id is None:
-        tvdb_id_for_mapping = external_ids.get("tvdb_id", "") if external_ids else ""
-        mapping_id = int(tvdb_id_for_mapping) if tvdb_id_for_mapping else ""
 
     episode_filled = 0
     episode_total = 0
