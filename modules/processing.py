@@ -267,4 +267,4 @@ async def process_library(
         return all_stats
     except Exception as e:
         log_processing_event("processing_failed_library", library_name=library_name, error=str(e))
-        return None, set(), 0
+        return []
