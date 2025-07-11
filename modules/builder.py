@@ -964,7 +964,7 @@ async def build_tv(
                 season_poster_actions[season_number] = "failed"
             if success and temp_path.exists():
                 should_upgrade, status_code, context = smart_season_asset_upgrade(
-                    config, asset_path, best, new_image_path=temp_path, asset_type="season", cache_key=cache_key, 
+                    config, asset_path, best, new_image_path=temp_path, cache_key=cache_key, 
                     season_number=season_number
                 )
                 await meta_cache_async(cache_key, tmdb_id, title, year, "tv", season_number=season_number, season_average=best.get("vote_average", 0))
