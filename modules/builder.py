@@ -29,10 +29,10 @@ async def build_movie(
         existing_assets = set()
     title = meta.get("title", "Unknown") if meta else None
     year = meta.get("year", "Unknown") if meta else None
+    full_title = f"{title} ({year})"
     cache_key = f"movie:{title}:{year}"
     movie_path = meta.get("movie_path") if meta else None
     library_type = meta.get("library_type", "movie") if meta else "movie"
-    full_title = f"{title} ({year})"
     tmdb_id = meta.get("tmdb_id") if meta else None
     imdb_id = meta.get("imdb_id") if meta else None
     mapping_id = None
@@ -432,11 +432,11 @@ async def build_tv(
         existing_assets = set()
     title = meta.get("title", "Unknown") if meta else None
     year = meta.get("year", "Unknown") if meta else None
+    full_title = f"{title} ({year})"
+    cache_key = f"tv:{title}:{year}"
     show_path = meta.get("show_path") if meta else None
     seasons_episodes = meta.get("seasons_episodes") if meta else None
     library_type = meta.get("library_type", "tv") if meta else "tv"
-    cache_key = f"tv:{title}:{year}"
-    full_title = f"{title} ({year})"
     tmdb_id = meta.get("tmdb_id") if meta else None
     tvdb_id = meta.get("tvdb_id") if meta else None
     imdb_id = meta.get("imdb_id") if meta else None
