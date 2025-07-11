@@ -265,7 +265,7 @@ async def build_movie(
 
         temp_path = asset_temp_path(config, library_type)
         try:
-            success, url, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
+            success, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
             if not success:
                 log_builder_event(
                     "builder_asset_download_failed", media_type="Movie", asset_type="poster",
@@ -349,7 +349,7 @@ async def build_movie(
 
         temp_path = asset_temp_path(config, library_type)
         try:
-            success, url, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
+            success, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
             if not success:
                 log_builder_event(
                     "builder_asset_download_failed", media_type="Movie", asset_type="background",
@@ -779,7 +779,7 @@ async def build_tv(
 
         temp_path = asset_temp_path(config, library_type)
         try:
-            success, url, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
+            success, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
             if not success:
                 log_builder_event(
                     "builder_asset_download_failed", media_type="TV Show", asset_type="poster",
@@ -863,7 +863,7 @@ async def build_tv(
     
         temp_path = asset_temp_path(config, library_type)
         try:
-            success, url, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
+            success, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
             if not success:
                 log_builder_event(
                     "builder_asset_download_failed", media_type="TV Show", asset_type="background",
@@ -955,7 +955,7 @@ async def build_tv(
 
         temp_path = asset_temp_path(config, library_type)
         try:
-            success, url, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
+            success, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
             if not success:
                 log_builder_event(
                     "builder_asset_download_failed_season", media_type="TV Show", asset_type="poster",

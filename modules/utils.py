@@ -308,7 +308,7 @@ def smart_asset_upgrade(
 
 def smart_season_asset_upgrade(
     config, asset_path, new_image_data, new_image_path=None, cache_key=None, 
-    asset_type="season", season_number=None
+    season_number=None
 ):
     from PIL import Image
     
@@ -406,7 +406,7 @@ async def download_poster(config, image_path, save_path, session=None, retries=3
             last_exception = e
         await asyncio.sleep(1)
     status = getattr(last_exception, "status", None)
-    return False, url, status, str(last_exception) if last_exception else None
+    return False, status, str(last_exception) if last_exception else None
 
 def get_asset_path(config, meta, asset_type="poster", season_number=None):
     mode = config["assets"].get("mode", "kometa")
