@@ -28,7 +28,7 @@ if __name__ == "__main__":
         library_item_counts = {}
 
         async with aiohttp.ClientSession() as session:
-            plex, sections, libraries, selected_libraries, all_libraries = connect_plex_library(config)
+            _, sections, _, selected_libraries, all_libraries = connect_plex_library(config)
             metadata_summaries = {}
             library_filesize = {}
 
@@ -47,9 +47,8 @@ if __name__ == "__main__":
                     )
                 )
 
-            results = []
             if tasks:
-                results = await asyncio.gather(*tasks)
+                await asyncio.gather(*tasks)
             else:
                 log_main_event("main_no_libraries")
 
