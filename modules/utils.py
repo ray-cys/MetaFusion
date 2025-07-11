@@ -389,7 +389,7 @@ def smart_season_asset_upgrade(
 async def download_poster(config, image_path, save_path, session=None, retries=3):
     url = f"https://image.tmdb.org/t/p/original{image_path or ''}"
     if session is None:
-        return False, url, None, "HTTP session failed"
+        return False, None, "HTTP session failed"
     last_exception = None
     for attempt in range(retries):
         try:
@@ -397,7 +397,7 @@ async def download_poster(config, image_path, save_path, session=None, retries=3
             if response_content:
                 result, error = await save_poster(response_content, save_path)
                 if result is True or result == "ALREADY_UP_TO_DATE":
-                    return True, url, 200, error
+                    return True, 200, error
                 else:
                     last_exception = Exception(error or "File not saved after download")
             else:

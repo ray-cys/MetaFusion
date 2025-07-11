@@ -1,4 +1,4 @@
-import sys, asyncio
+import sys, asyncio, logging
 from plexapi.server import PlexServer
 from pathlib import Path
 from helper.logging import log_plex_event
