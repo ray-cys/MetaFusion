@@ -26,7 +26,7 @@ def save_cache(cache):
             entry.pop("season_number", None)
 
 cache_lock = asyncio.Lock()
-async def meta_cache_async(cache_key, tmdb_id, title, year, media_type, **kwargs):
+async def meta_cache_async(cache_key, tmdb_id, title, year, media_type, update_timestamp=True, **kwargs):
     async with cache_lock:
         cache = load_cache()
         entry = cache.get(cache_key, {})
@@ -34,7 +34,8 @@ async def meta_cache_async(cache_key, tmdb_id, title, year, media_type, **kwargs
         entry["title"] = title
         entry["year"] = year
         entry["media_type"] = media_type
-        entry["last_updated"] = datetime.now().isoformat()
+        if update_timestamp:
+            entry["last_updated"] = datetime.now().isoformat()
         season_number = kwargs.pop("season_number", None)
         if season_number is not None:
             seasons = entry.setdefault("seasons", {})

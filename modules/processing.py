@@ -58,7 +58,7 @@ async def process_library(
     
     library_name = library_section.title
     if ignored_fields is None:
-        ignored_fields = {"collection", "guest"}
+        ignored_fields = {"runtime", "guest"}
     existing_yaml_data = {}
 
     if library_item_counts is not None:

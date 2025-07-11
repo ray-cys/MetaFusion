@@ -1,5 +1,4 @@
 import asyncio, hashlib, uuid, re
-from PIL import Image
 from pathlib import Path
 from helper.config import load_config_file
 from helper.cache import load_cache
@@ -236,6 +235,8 @@ def smart_asset_upgrade(
     config, asset_path, new_image_data, new_image_path=None, cache_key=None,
     asset_type="poster"
 ):
+    from PIL import Image
+    
     new_width = new_image_data.get("width", 0)
     new_height = new_image_data.get("height", 0)
     new_votes = new_image_data.get("vote_average", 0)
@@ -310,6 +311,8 @@ def smart_season_asset_upgrade(
     config, asset_path, new_image_data, new_image_path=None, cache_key=None, 
     asset_type="season", season_number=None
 ):
+    from PIL import Image
+    
     new_width = new_image_data.get("width", 0)
     new_height = new_image_data.get("height", 0)
     new_votes = new_image_data.get("vote_average", 0)

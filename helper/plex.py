@@ -291,8 +291,8 @@ def get_plex_country(code):
     return PLEX_COUNTRY_OVERRIDES.get(code) or ISO_COUNTRY_NAMES.get(code) or code
 
 def connect_plex_library(config, selected_libraries=None):
-    if selected_libraries is None:
-        selected_libraries = config.get("plex_libraries", ["Movies", "TV Shows"])
+    if not selected_libraries:
+        selected_libraries = config.get("plex_libraries") or ["Movies", "TV Shows"]
     try:
         plex = PlexServer(config["plex"]["url"], config["plex"]["token"])
         log_plex_event("plex_connected", version=plex.version)
