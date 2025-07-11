@@ -1,4 +1,4 @@
-import asyncio, logging, json, hashlib
+import asyncio, json, hashlib
 from aiolimiter import AsyncLimiter
 from helper.logging import log_tmdb_event
 

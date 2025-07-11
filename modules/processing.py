@@ -31,14 +31,14 @@ async def process_item(
                     config, consolidated_metadata,
                     existing_yaml_data=existing_yaml_data, session=session,
                     ignored_fields=ignored_fields, existing_assets=existing_assets,
-                    library_name=library_name, meta=meta, feature_flags=feature_flags
+                    meta=meta, feature_flags=feature_flags
                 )
             elif library_type in ("show", "tv"):
                 stats = await build_tv(
                     config, consolidated_metadata,
                     existing_yaml_data=existing_yaml_data, session=session,
                     ignored_fields=ignored_fields, existing_assets=existing_assets,
-                    library_name=library_name, meta=meta, feature_flags=feature_flags   
+                    meta=meta, feature_flags=feature_flags   
                 )
             else:
                 log_processing_event("processing_unsupported_type", full_title=full_title)
@@ -267,4 +267,4 @@ async def process_library(
         return all_stats
     except Exception as e:
         log_processing_event("processing_failed_library", library_name=library_name, error=str(e))
-        return None, set(), 0
+        return []

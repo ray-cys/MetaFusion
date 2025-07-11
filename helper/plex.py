@@ -1,4 +1,4 @@
-import sys, asyncio, logging
+import sys, asyncio
 from plexapi.server import PlexServer
 from pathlib import Path
 from helper.logging import log_plex_event
@@ -331,7 +331,7 @@ def connect_plex_library(config, selected_libraries=None):
         log_plex_event("plex_no_libraries_found")
         sys.exit(0)
 
-    return plex, sections, libraries, selected_libraries, all_libraries
+    return sections, selected_libraries, all_libraries
 
 _plex_cache = {}
 async def get_plex_metadata(item, _season_cache=None, _episode_cache=None, _movie_cache=None):
@@ -457,7 +457,9 @@ async def get_plex_metadata(item, _season_cache=None, _episode_cache=None, _movi
         "imdb_id": imdb_id,
         "tvdb_id": tvdb_id,
         "movie_path": movie_path,
+        "movie_dir": movie_dir, 
         "show_path": show_path,
+        "show_dir": show_dir,
         "seasons_episodes": seasons_episodes,
     }
     critical_fields = ["title", "year", "tmdb_id"]

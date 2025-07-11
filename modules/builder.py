@@ -11,7 +11,7 @@ from modules.utils import (
 
 async def build_movie(
     config, consolidated_metadata, feature_flags=None, existing_yaml_data=None, session=None, ignored_fields=None,
-    existing_assets=None, library_name=None, meta=None, 
+    existing_assets=None, meta=None, 
 ):
     metadata_action = "skipped"
     poster_action = "skipped"
@@ -265,7 +265,7 @@ async def build_movie(
 
         temp_path = asset_temp_path(config, library_type)
         try:
-            success, url, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
+            success, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
             if not success:
                 log_builder_event(
                     "builder_asset_download_failed", media_type="Movie", asset_type="poster",
@@ -349,7 +349,7 @@ async def build_movie(
 
         temp_path = asset_temp_path(config, library_type)
         try:
-            success, url, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
+            success, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
             if not success:
                 log_builder_event(
                     "builder_asset_download_failed", media_type="Movie", asset_type="background",
@@ -412,7 +412,7 @@ async def build_movie(
 
 async def build_tv(
     config, consolidated_metadata, feature_flags=None, existing_yaml_data=None, session=None, ignored_fields=None,
-    existing_assets=None, library_name=None, meta=None, 
+    existing_assets=None, meta=None, 
 ):
     metadata_action = "skipped"
     poster_action = "skipped"
@@ -779,7 +779,7 @@ async def build_tv(
 
         temp_path = asset_temp_path(config, library_type)
         try:
-            success, url, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
+            success, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
             if not success:
                 log_builder_event(
                     "builder_asset_download_failed", media_type="TV Show", asset_type="poster",
@@ -863,7 +863,7 @@ async def build_tv(
     
         temp_path = asset_temp_path(config, library_type)
         try:
-            success, url, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
+            success, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
             if not success:
                 log_builder_event(
                     "builder_asset_download_failed", media_type="TV Show", asset_type="background",
@@ -955,7 +955,7 @@ async def build_tv(
 
         temp_path = asset_temp_path(config, library_type)
         try:
-            success, url, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
+            success, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
             if not success:
                 log_builder_event(
                     "builder_asset_download_failed_season", media_type="TV Show", asset_type="poster",
@@ -964,8 +964,7 @@ async def build_tv(
                 season_poster_actions[season_number] = "failed"
             if success and temp_path.exists():
                 should_upgrade, status_code, context = smart_season_asset_upgrade(
-                    config, asset_path, best, new_image_path=temp_path, asset_type="season", cache_key=cache_key, 
-                    season_number=season_number
+                    config, asset_path, best, new_image_path=temp_path, cache_key=cache_key, season_number=season_number
                 )
                 await meta_cache_async(cache_key, tmdb_id, title, year, "tv", season_number=season_number, season_average=best.get("vote_average", 0))
                 if should_upgrade:
