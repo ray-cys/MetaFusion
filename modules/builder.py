@@ -11,7 +11,7 @@ from modules.utils import (
 
 async def build_movie(
     config, consolidated_metadata, feature_flags=None, existing_yaml_data=None, session=None, ignored_fields=None,
-    existing_assets=None, library_name=None, meta=None, 
+    existing_assets=None, meta=None, 
 ):
     metadata_action = "skipped"
     poster_action = "skipped"
@@ -412,7 +412,7 @@ async def build_movie(
 
 async def build_tv(
     config, consolidated_metadata, feature_flags=None, existing_yaml_data=None, session=None, ignored_fields=None,
-    existing_assets=None, library_name=None, meta=None, 
+    existing_assets=None, meta=None, 
 ):
     metadata_action = "skipped"
     poster_action = "skipped"
