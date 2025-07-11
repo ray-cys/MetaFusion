@@ -457,7 +457,9 @@ async def get_plex_metadata(item, _season_cache=None, _episode_cache=None, _movi
         "imdb_id": imdb_id,
         "tvdb_id": tvdb_id,
         "movie_path": movie_path,
+        "movie_dir": movie_dir, 
         "show_path": show_path,
+        "show_dir": show_dir,
         "seasons_episodes": seasons_episodes,
     }
     critical_fields = ["title", "year", "tmdb_id"]
