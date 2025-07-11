@@ -331,7 +331,7 @@ def connect_plex_library(config, selected_libraries=None):
         log_plex_event("plex_no_libraries_found")
         sys.exit(0)
 
-    return plex, sections, libraries, selected_libraries, all_libraries
+    return sections, selected_libraries, all_libraries
 
 _plex_cache = {}
 async def get_plex_metadata(item, _season_cache=None, _episode_cache=None, _movie_cache=None):

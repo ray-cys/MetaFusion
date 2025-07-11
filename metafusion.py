@@ -28,7 +28,7 @@ if __name__ == "__main__":
         library_item_counts = {}
 
         async with aiohttp.ClientSession() as session:
-            _, sections, _, selected_libraries, all_libraries = connect_plex_library(config)
+            sections, selected_libraries, all_libraries = connect_plex_library(config)
             metadata_summaries = {}
             library_filesize = {}
 
