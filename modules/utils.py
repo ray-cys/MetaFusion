@@ -1,6 +1,5 @@
 import asyncio, hashlib, uuid, re
 from pathlib import Path
-from helper.config import load_config_file
 from helper.cache import load_cache
 from helper.tmdb import tmdb_api_request
 
