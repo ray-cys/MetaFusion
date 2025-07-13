@@ -653,8 +653,8 @@ def log_library_summary(
             f"Skipped: {library_summary.get('meta_skipped', 0)}", box_width))
     if run_metadata:
         meta_line = (
-            f"Metadata - {completed}/{total_items} ({percent_complete}%) Complete, "
-            f"{incomplete} ({percent_incomplete}%) Incomplete"
+            f"Metadata - Complete: {completed}/{total_items} ({percent_complete}%), "
+            f"Incomplete: {incomplete} ({percent_incomplete}%)"
         )
         lines.extend(box_line(meta_line, box_width))
        
@@ -768,8 +768,8 @@ def log_final_summary(
             f"Skipped: {libsum.get('meta_skipped', 0)}", box_width))
         percent_incomplete = summary.get('percent_incomplete', 100 - summary['percent_complete'])
         lines.extend(box_line(
-            f"Metadata - {summary['complete']}/{summary['total_items']} ({summary['percent_complete']}%) Complete, "
-            f"{summary['incomplete']} ({percent_incomplete}%) Incomplete", box_width))
+            f"Metadata - Complete: {summary['complete']}/{summary['total_items']} ({summary['percent_complete']}%), "
+            f"Incomlete: {summary['incomplete']} ({percent_incomplete}%)", box_width))
 
         if feature_flags and feature_flags.get("poster", False) and library_type in ("movie", "tv", "show"):
             lines.extend(box_line(
