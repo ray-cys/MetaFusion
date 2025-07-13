@@ -805,7 +805,7 @@ def log_final_summary(
                 f"Failed: {libsum.get('season_poster_failed', 0)}", box_width))
 
         lines.extend(box_line(
-            f"Assets - {human_readable_size(asset_size)} Downloaded / {human_readable_size(total_asset_size)} Total", box_width))
+            f"Assets - {human_readable_size(asset_size)} / {human_readable_size(total_asset_size)}", box_width))
         lines.append(border)
 
     if cleanup_title_orphans:
