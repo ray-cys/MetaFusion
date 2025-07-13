@@ -637,7 +637,7 @@ def log_library_summary(
         f"| {title.center(box_width - 4)} |",
         header,
         (
-            f"| {library_name} - Processed: {total_items} Titles"
+            f"| {library_name} - Titles: {total_items}"
             + (
                 f" | Seasons: {season_count or 0} | Episodes: {episode_count or 0}"
                 if library_type in ("tv", "show") and (season_count is not None or episode_count is not None)
@@ -754,7 +754,7 @@ def log_final_summary(
         season_count = summary.get("season_count")
         episode_count = summary.get("episode_count")
         summary_line = (
-            f"{lib} - Processed {summary['total_items']} Titles"
+            f"{lib} - Titles: {summary['total_items']}"
             + (
                 f" | Seasons: {season_count or 0} | Episodes: {episode_count or 0}"
                 if library_type in ("tv", "show") and (season_count is not None or episode_count is not None)
