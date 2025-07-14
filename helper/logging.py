@@ -175,6 +175,9 @@ def log_main_event(event, logger=None, **kwargs):
     except Exception:
         pass
     level = levels.get(event, "info")
+    if event == "main_scheduled_run":
+        print(msg)
+        return
     if level == "info":
         logger.info(msg)
     elif level == "warning":
