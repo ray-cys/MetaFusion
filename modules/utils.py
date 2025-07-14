@@ -434,16 +434,16 @@ def get_asset_path(config, meta, asset_type="poster", season_number=None):
         assets_path.mkdir(parents=True, exist_ok=True)
         if asset_type == "poster":
             if library_type == "movie":
-                return assets_path / library_type / movie_path / "poster.jpg"
+                return assets_path / movie_path / "poster.jpg"
             elif library_type in ("show", "tv"):
-                return assets_path / library_type / show_path / "poster.jpg"
+                return assets_path / show_path / "poster.jpg"
         elif asset_type == "background":
             if library_type == "movie":
-                return assets_path / library_type / movie_path / "fanart.jpg"
+                return assets_path / movie_path / "fanart.jpg"
             elif library_type in ("show", "tv"):
-                return assets_path / library_type / show_path / "fanart.jpg"
+                return assets_path / show_path / "fanart.jpg"
         elif asset_type == "season" and season_number is not None:
-            return assets_path / library_type / show_path / f"Season{season_number:02}.jpg"
+            return assets_path / show_path / f"Season{season_number:02}.jpg"
     return None
 
 def asset_temp_path(config, meta, extension="jpg"):
