@@ -6,6 +6,9 @@ from helper.cache import load_cache, save_cache
 async def cleanup_title_orphans(
     config, feature_flags, asset_path=None, existing_assets=None, preloaded_plex_metadata=None
 ):
+    if config.get("settings", {}).get("mode", "kometa") != "kometa":
+        log_cleanup_event("cleanup_skipped_plex_mode")
+        return 0
     log_cleanup_event("cleanup_start")
     orphans_removed = 0
     global_valid_cache_keys = set()
@@ -55,7 +58,7 @@ async def cleanup_title_orphans(
 
     library_types = {"movie", "tv", "show"} 
     preferred_filenames = {f"{lt}_metadata.yml" for lt in library_types}
-    metadata_dir = Path(config["metadata"]["path"])
+    metadata_dir = Path(config.get("settings", {}).get("path", ".")) / "metadata"
     def extract_title_year(orphan_title):
         if " (" in orphan_title and orphan_title.endswith(")"):
             t, y = orphan_title.rsplit(" (", 1)
@@ -102,7 +105,6 @@ async def cleanup_title_orphans(
             except Exception as e:
                 log_cleanup_event("cleanup_failed_remove_metadata", filename=metadata_file, error=str(e))
 
-    assets_config = config.get("assets", {})
     if asset_path:
         valid_asset_dirs = set()
         for (title, year, media_type), meta in preloaded_plex_metadata.items():

@@ -1,5 +1,6 @@
 import asyncio, hashlib, uuid, re
 from pathlib import Path
+from helper.config import mode_check
 from helper.cache import load_cache
 from helper.tmdb import tmdb_api_request
 
@@ -409,11 +410,10 @@ async def download_poster(config, image_path, save_path, session=None, retries=3
     return False, status, str(last_exception) if last_exception else None
 
 def get_asset_path(config, meta, asset_type="poster", season_number=None):
-    mode = config["assets"].get("mode", "kometa")
+    mode = config.get("settings", {}).get("mode", "kometa")
     library_type = meta.get("library_type")
     show_path = meta.get("show_path")
     movie_path = meta.get("movie_path")
-    assets_path = Path(config["assets"]["path"])
 
     if mode == "plex":
         if asset_type == "poster":
@@ -429,7 +429,9 @@ def get_asset_path(config, meta, asset_type="poster", season_number=None):
         elif asset_type == "season" and season_number is not None:
             return Path(meta["show_dir"]) / f"Season {season_number:02}" / f"Season{season_number:02}.jpg"
     else:
-        assets_path = Path(config["assets"]["path"])
+        kometa_root = config.get("settings", {}).get("path", ".")
+        assets_path = Path(kometa_root) / "assets" / library_type
+        assets_path.mkdir(parents=True, exist_ok=True)
         if asset_type == "poster":
             if library_type == "movie":
                 return assets_path / library_type / movie_path / "poster.jpg"
@@ -444,12 +446,22 @@ def get_asset_path(config, meta, asset_type="poster", season_number=None):
             return assets_path / library_type / show_path / f"Season{season_number:02}.jpg"
     return None
 
-def asset_temp_path(config, library_type, extension="jpg"):
-    assets_path = Path(config["assets"]["path"])
-    temp_dir = assets_path / library_type
-    temp_dir.mkdir(parents=True, exist_ok=True)
+def asset_temp_path(config, meta, extension="jpg"):
+    if mode_check(config, "kometa"):
+        kometa_root = config.get("settings", {}).get("path", ".")
+        library_type = meta.get("library_type", "movie")
+        assets_path = Path(kometa_root) / "assets" / library_type
+    else:
+        library_type = meta.get("library_type", "movie")
+        if library_type == "movie":
+            assets_path = Path(meta["movie_dir"])
+        elif library_type in ("show", "tv"):
+            assets_path = Path(meta["show_dir"])
+        else:
+            assets_path = Path(".")
+    assets_path.mkdir(parents=True, exist_ok=True)
     temp_filename = f"temp_{uuid.uuid4().hex}.{extension}"
-    return temp_dir / temp_filename
+    return assets_path / temp_filename
 
 async def save_poster(image_content, save_path):
     try:

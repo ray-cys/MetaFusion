@@ -1,4 +1,5 @@
 import sys, asyncio, aiohttp, time, schedule
+from pathlib import Path
 from datetime import datetime
 from helper.config import load_config_file, get_disabled_features, get_feature_flags
 from helper.plex import connect_plex_library, _plex_cache
@@ -49,9 +50,11 @@ async def metafusion_main():
             log_main_event("main_no_libraries")
 
         orphans_removed = 0
-        if feature_flags.get("cleanup", False):
+        if feature_flags.get("cleanup", False) and config.get("settings", {}).get("mode", "kometa") == "kometa":
+            kometa_root = config.get("settings", {}).get("path", ".")
+            asset_path = str(Path(kometa_root) / "assets")
             orphans_removed = await cleanup_title_orphans(
-                config=config, asset_path=config["assets"]["path"],
+                config=config, asset_path=asset_path,
                 preloaded_plex_metadata=plex_metadata_dict, feature_flags=feature_flags
             )
 
