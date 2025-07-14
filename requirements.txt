@@ -2,8 +2,7 @@
 requests
 psutil
 plexapi
-ruamel.yaml
-orjson
+pyyaml
 Pillow
 aiohttp
 aiolimiter
