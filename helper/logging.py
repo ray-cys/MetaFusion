@@ -158,12 +158,14 @@ def log_main_event(event, logger=None, **kwargs):
         "main_processing_disabled": "[MetaFusion] Processing is set to False. Exiting without changes.",
         "main_no_libraries": "[MetaFusion] No libraries scheduled for processing.",
         "main_unhandled_exception": "[MetaFusion] Unhandled exception: {error}",
+        "main_scheduled_run": "[MetaFusion] Scheduled run at {run_time}",
     }
     levels = {
         "main_started": "info",
         "main_processing_disabled": "info",
         "main_no_libraries": "info",
         "main_unhandled_exception": "error",
+        "main_scheduled_run": "info",
     }
     msg = messages.get(event, "[MetaFusion] Unknown event")
     try:

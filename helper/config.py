@@ -7,7 +7,8 @@ CONFIG_FILE = Path("/config/config.yml")
 DEFAULT_CONFIG = {
     "metafusion_run": True,
     "settings": {
-        "schedule": None,
+        "schedule": True,
+        "run_times": ["06:00", "18:30"],
         "dry_run": False,
         "log_level": "INFO",
     },
