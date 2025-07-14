@@ -74,8 +74,11 @@ def run_metafusion_job():
         sys.exit(1)
 
 if __name__ == "__main__":
-    run_times = config.get("settings", {}).get("run_times", [])
-    if run_times:
+    settings = config.get("settings", {})
+    run_times = settings.get("run_times", [])
+    schedule_enabled = settings.get("schedule", False)
+
+    if schedule_enabled and run_times:
         for t in run_times:
             schedule.every().day.at(t).do(run_metafusion_job)
         log_main_event("main_scheduled_run", run_time=', '.join(run_times), logger=logger)
