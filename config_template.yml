@@ -11,10 +11,12 @@ settings:
     - "18:30"
   dry_run: false
   log_level: "INFO"
+  mode: "kometa"  # or "plex"
+  path: "/kometa"
 
 # Plex server configuration
 plex:
-  url: "http://your-plex-server:32400"
+  url: "http://10.0.0.1:32400"
   token: "YOUR_PLEX_TOKEN"
 
 # Plex libraries to process
@@ -34,13 +36,10 @@ tmdb:
 
 # Metadata and asset processing options
 metadata:
-  path: "/path/to/metadata/"
   run_basic: true
   run_enhanced: true
 
 assets:
-  path: "/path/to/assets/"
-  mode: "kometa"  # or "plex"
   run_poster: true
   run_season: true
   run_background: false

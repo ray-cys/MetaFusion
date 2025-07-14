@@ -2,35 +2,34 @@ import os, yaml
 from pathlib import Path
 from helper.logging import log_config_event
 
-CONFIG_FILE = Path("/config/config.yml")
+CONFIG_FILE = Path("/config/test/MetaFusion/config.yml")
 
 DEFAULT_CONFIG = {
     "metafusion_run": os.environ.get("METAFUSION_RUN", True),
     "settings": {
-        "schedule": os.environ.get("SCHEDULE", "True").lower() == "true",
+        "schedule": os.environ.get("RUN_SCHEDULE", "True").lower() == "true",
         "run_times": os.environ.get("RUN_TIMES", "06:00,18:30").split(","),
         "dry_run": os.environ.get("DRY_RUN", "False").lower() == "true",
         "log_level": os.environ.get("LOG_LEVEL", "INFO"),
+        "mode": os.environ.get("RUN_MODE", "kometa"),
+        "path": os.environ.get("KOMETA_PATH", "/kometa/"),
     },
     "plex": {
-        "url": os.environ.get("PLEX_URL", "PLEX_URL"),
+        "url": os.environ.get("PLEX_URL", "http://10.0.0.1:32400"),
         "token": os.environ.get("PLEX_TOKEN", "PLEX_TOKEN"),
     },
     "plex_libraries": os.environ.get("PLEX_LIBRARIES", "Movies,TV Shows").split(","),
     "tmdb": {
         "api_key": os.environ.get("TMDB_API_KEY", "TMDB_API_KEY"),
         "language": os.environ.get("TMDB_LANGUAGE", "en"),
+        "fallback": os.environ.get("TMDB_LANGUAGE_FALLBACK", "zh,ja").split(","),
         "region": os.environ.get("TMDB_REGION", "US"),
-        "fallback": os.environ.get("TMDB_FALLBACK", "zh,ja").split(","),
     },
     "metadata": {
-        "path": os.environ.get("METADATA_PATH", "metadata"),
         "run_basic": os.environ.get("RUN_BASIC", "True").lower() == "true",
         "run_enhanced": os.environ.get("RUN_ENHANCED", "True").lower() == "true",
     },
     "assets": {
-        "path": os.environ.get("ASSETS_PATH", "assets"),
-        "mode": os.environ.get("ASSETS_MODE", "kometa"),
         "run_poster": os.environ.get("RUN_POSTER", "True").lower() == "true",
         "run_season": os.environ.get("RUN_SEASON", "True").lower() == "true",
         "run_background": os.environ.get("RUN_BACKGROUND", "False").lower() == "true",
@@ -112,6 +111,9 @@ def merge_config_dicts(default, user):
             merge_config_dicts(default[k], v)
         else:
             default[k] = v
+
+def mode_check(config, mode="kometa"):
+    return config.get("settings", {}).get("mode", "kometa").lower() == mode.lower()
 
 def load_config_file():
     if not CONFIG_FILE.exists():

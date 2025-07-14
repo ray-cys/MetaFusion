@@ -263,7 +263,7 @@ async def build_movie(
             poster_action = "failed"
             return
 
-        temp_path = asset_temp_path(config, library_type)
+        temp_path = asset_temp_path(config, meta)
         try:
             success, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
             if not success:
@@ -347,7 +347,7 @@ async def build_movie(
             background_action = "failed"
             return
 
-        temp_path = asset_temp_path(config, library_type)
+        temp_path = asset_temp_path(config, meta)
         try:
             success, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
             if not success:
@@ -777,7 +777,7 @@ async def build_tv(
             poster_action = "failed"
             return
 
-        temp_path = asset_temp_path(config, library_type)
+        temp_path = asset_temp_path(config, meta)
         try:
             success, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
             if not success:
@@ -861,7 +861,7 @@ async def build_tv(
             background_action = "failed"
             return
     
-        temp_path = asset_temp_path(config, library_type)
+        temp_path = asset_temp_path(config, meta)
         try:
             success, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
             if not success:
@@ -953,7 +953,7 @@ async def build_tv(
             season_poster_actions[season_number] = "failed"
             return
 
-        temp_path = asset_temp_path(config, library_type)
+        temp_path = asset_temp_path(config, meta)
         try:
             success, status, error = await download_poster(config, best["file_path"], temp_path, session=session)
             if not success:

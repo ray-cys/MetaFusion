@@ -1,7 +1,8 @@
 import asyncio, yaml
 from pathlib import Path
-from helper.logging import log_processing_event, log_library_summary
 from helper.cache import save_cache, load_cache
+from helper.config import mode_check 
+from helper.logging import log_processing_event, log_library_summary
 from helper.plex import get_plex_metadata
 from modules.builder import build_movie, build_tv
 
@@ -107,18 +108,23 @@ async def process_library(
                 library_type = "tv"
             else:
                 library_type = "unknown"
-        output_path = Path(config["metadata"]["path"]) / f"{library_type}_metadata.yml"
-        
-        if output_path.exists():
-            try:
-                with open(output_path, "r", encoding="utf-8") as f:
-                    existing_yaml_data = yaml.safe_load(f) or {}
-            except Exception as e:
-                log_processing_event("processing_failed_parse_yaml", output_path=output_path, error=str(e))
 
-        consolidated_metadata = existing_yaml_data if existing_yaml_data else {"metadata": {}}
-        existing_assets = set()
-    
+        output_path = None
+        consolidated_metadata = {"metadata": {}}
+        if mode_check(config, "kometa"):
+            kometa_root = config.get("settings", {}).get("path", ".")
+            metadata_dir = Path(kometa_root) / "metadata"
+            metadata_dir.mkdir(parents=True, exist_ok=True)
+            output_path = metadata_dir / f"{library_type}_metadata.yml"
+            if output_path.exists():
+                try:
+                    with open(output_path, "r", encoding="utf-8") as f:
+                        existing_yaml_data = yaml.safe_load(f) or {}
+                except Exception as e:
+                    log_processing_event("processing_failed_parse_yaml", output_path=output_path, error=str(e))
+            consolidated_metadata = existing_yaml_data if existing_yaml_data else {"metadata": {}}
+
+        existing_assets = set()    
         all_stats = []
         async def process_and_collect(item):
             nonlocal poster_size, background_size, season_poster_size, total_asset_size
@@ -215,9 +221,8 @@ async def process_library(
         if library_filesize is not None:
             library_filesize[library_name] = total_asset_size
 
-        if not feature_flags["dry_run"]:
+        if mode_check(config, "kometa") and not feature_flags["dry_run"]:
             try:
-                output_path.parent.mkdir(parents=True, exist_ok=True)
                 with open(output_path, "w", encoding="utf-8") as f:
                     yaml.dump(consolidated_metadata, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
                 log_processing_event("processing_metadata_saved", output_path=output_path)
@@ -225,7 +230,7 @@ async def process_library(
                 log_processing_event("processing_cache_saved")
             except Exception as e:
                 log_processing_event("processing_failed_write_metadata", error=str(e))
-        else:
+        elif mode_check(config, "kometa") and feature_flags["dry_run"]:
             log_processing_event("processing_metadata_dry_run", library_name=library_name)
 
         run_metadata = feature_flags["metadata_basic"] or feature_flags["metadata_enhanced"]
