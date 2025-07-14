@@ -6,7 +6,6 @@ from helper.tmdb import tmdb_response_cache
 from helper.logging import (
     get_setup_logging, get_meta_banner, check_sys_requirements, log_final_summary, log_main_event
 )
-
 from modules.processing import process_library, plex_metadata_dict
 from modules.cleanup import cleanup_title_orphans
 
@@ -82,10 +81,11 @@ if __name__ == "__main__":
 
     if metafusion_run:
         run_metafusion_job()
+        log_main_event("main_force_run", start_time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
     elif schedule_enabled and run_times:
         for t in run_times:
             schedule.every().day.at(t).do(run_metafusion_job)
-        log_main_event("main_scheduled_run", run_time=', '.join(run_times), logger=logger)
+        log_main_event("main_scheduled_run", run_time=', '.join(run_times))
         while True:
             schedule.run_pending()
             time.sleep(30)
