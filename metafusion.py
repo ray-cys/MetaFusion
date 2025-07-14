@@ -82,10 +82,11 @@ if __name__ == "__main__":
 
     if metafusion_run:
         run_metafusion_job()
+        log_main_event("main_force_run", start_time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
     elif schedule_enabled and run_times:
         for t in run_times:
             schedule.every().day.at(t).do(run_metafusion_job)
-        log_main_event("main_scheduled_run", run_time=', '.join(run_times), logger=logger)
+        log_main_event("main_scheduled_run", run_time=', '.join(run_times))
         while True:
             schedule.run_pending()
             time.sleep(30)

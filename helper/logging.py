@@ -155,6 +155,7 @@ def log_main_event(event, logger=None, **kwargs):
     logger = kwargs.get("logger") or logging.getLogger()
     messages = {
         "main_started": "[MetaFusion] Processing started on {start_time}",
+        "main_force_run": "[MetaFusion] Force run started on {start_time}",
         "main_processing_disabled": "[MetaFusion] Processing is set to False. Exiting without changes.",
         "main_no_libraries": "[MetaFusion] No libraries scheduled for processing.",
         "main_unhandled_exception": "[MetaFusion] Unhandled exception: {error}",
@@ -162,6 +163,7 @@ def log_main_event(event, logger=None, **kwargs):
     }
     levels = {
         "main_started": "info",
+        "main_force_run": "info",
         "main_processing_disabled": "info",
         "main_no_libraries": "info",
         "main_unhandled_exception": "error",
