@@ -637,7 +637,7 @@ def log_library_summary(
         f"| {title.center(box_width - 4)} |",
         header,
         (
-            f"| {library_name} - Processed: {total_items} Titles"
+            f"| {library_name} - Titles: {total_items}"
             + (
                 f" | Seasons: {season_count or 0} | Episodes: {episode_count or 0}"
                 if library_type in ("tv", "show") and (season_count is not None or episode_count is not None)
@@ -653,8 +653,8 @@ def log_library_summary(
             f"Skipped: {library_summary.get('meta_skipped', 0)}", box_width))
     if run_metadata:
         meta_line = (
-            f"Metadata - {completed}/{total_items} ({percent_complete}%) Complete, "
-            f"{incomplete} ({percent_incomplete}%) Incomplete"
+            f"Metadata - Complete: {completed}/{total_items} ({percent_complete}%), "
+            f"Incomplete: {incomplete} ({percent_incomplete}%)"
         )
         lines.extend(box_line(meta_line, box_width))
        
@@ -726,11 +726,11 @@ def log_final_summary(
         border
     ]
     minutes, seconds = divmod(int(elapsed_time), 60)
-    lines.extend(box_line(f"Processing Completed - {minutes} mins {seconds} secs.", box_width))
+    lines.extend(box_line(f"Executed in {minutes} mins {seconds} secs.", box_width))
     processed_libraries = [lib["title"] for lib in libraries if lib["title"] in selected_libraries]
     skipped_libraries = [lib["title"] for lib in libraries if lib["title"] not in selected_libraries]
     lines.extend(box_line(
-        f"Libraries Processed - {', '.join(processed_libraries) if processed_libraries else 'None'} ({len(processed_libraries)})"
+        f"Processed - {', '.join(processed_libraries) if processed_libraries else 'None'} ({len(processed_libraries)})"
         f" | Skipped: {', '.join(skipped_libraries) if skipped_libraries else 'None'} ({len(skipped_libraries)})",
         box_width
     ))
@@ -754,7 +754,7 @@ def log_final_summary(
         season_count = summary.get("season_count")
         episode_count = summary.get("episode_count")
         summary_line = (
-            f"{lib} - Processed {summary['total_items']} Titles"
+            f"{lib} - Titles: {summary['total_items']}"
             + (
                 f" | Seasons: {season_count or 0} | Episodes: {episode_count or 0}"
                 if library_type in ("tv", "show") and (season_count is not None or episode_count is not None)
@@ -768,8 +768,8 @@ def log_final_summary(
             f"Skipped: {libsum.get('meta_skipped', 0)}", box_width))
         percent_incomplete = summary.get('percent_incomplete', 100 - summary['percent_complete'])
         lines.extend(box_line(
-            f"Metadata - {summary['complete']}/{summary['total_items']} ({summary['percent_complete']}%) Complete, "
-            f"{summary['incomplete']} ({percent_incomplete}%) Incomplete", box_width))
+            f"Metadata - Complete: {summary['complete']}/{summary['total_items']} ({summary['percent_complete']}%), "
+            f"Incomlete: {summary['incomplete']} ({percent_incomplete}%)", box_width))
 
         if feature_flags and feature_flags.get("poster", False) and library_type in ("movie", "tv", "show"):
             lines.extend(box_line(
@@ -805,7 +805,7 @@ def log_final_summary(
                 f"Failed: {libsum.get('season_poster_failed', 0)}", box_width))
 
         lines.extend(box_line(
-            f"Assets - {human_readable_size(asset_size)} Downloaded / {human_readable_size(total_asset_size)} Total", box_width))
+            f"Assets - {human_readable_size(asset_size)} / {human_readable_size(total_asset_size)}", box_width))
         lines.append(border)
 
     if cleanup_title_orphans:
