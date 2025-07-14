@@ -1,71 +1,69 @@
-import yaml
+import os, yaml
 from pathlib import Path
 from helper.logging import log_config_event
 
 CONFIG_FILE = Path("/config/config.yml")
 
 DEFAULT_CONFIG = {
-    "metafusion_run": True,
+    "metafusion_run": os.environ.get("METAFUSION_RUN", True),
     "settings": {
-        "schedule": True,
-        "run_times": ["06:00", "18:30"],
-        "dry_run": False,
-        "log_level": "INFO",
+        "schedule": os.environ.get("SCHEDULE", "True").lower() == "true",
+        "run_times": os.environ.get("RUN_TIMES", "06:00,18:30").split(","),
+        "dry_run": os.environ.get("DRY_RUN", "False").lower() == "true",
+        "log_level": os.environ.get("LOG_LEVEL", "INFO"),
     },
     "plex": {
-        "url": "PLEX_URL",
-        "token": "PLEX_TOKEN",
+        "url": os.environ.get("PLEX_URL", "PLEX_URL"),
+        "token": os.environ.get("PLEX_TOKEN", "PLEX_TOKEN"),
     },
-    "plex_libraries": [
-        "Movies", "TV Shows"
-    ],
+    "plex_libraries": os.environ.get("PLEX_LIBRARIES", "Movies,TV Shows").split(","),
     "tmdb": {
-        "api_key": "TMDB_API_KEY",
-        "language": "en",
-        "region": "US",
-        "fallback": ["zh", "ja"]
+        "api_key": os.environ.get("TMDB_API_KEY", "TMDB_API_KEY"),
+        "language": os.environ.get("TMDB_LANGUAGE", "en"),
+        "region": os.environ.get("TMDB_REGION", "US"),
+        "fallback": os.environ.get("TMDB_FALLBACK", "zh,ja").split(","),
     },
     "metadata": {
-        "path": "metadata",
-        "run_basic": True,
-        "run_enhanced": True,
+        "path": os.environ.get("METADATA_PATH", "metadata"),
+        "run_basic": os.environ.get("RUN_BASIC", "True").lower() == "true",
+        "run_enhanced": os.environ.get("RUN_ENHANCED", "True").lower() == "true",
     },
     "assets": {
-        "path": "assets",
-        "mode": "kometa",
-        "run_poster": True,
-        "run_season": True,
-        "run_background": False,
+        "path": os.environ.get("ASSETS_PATH", "assets"),
+        "mode": os.environ.get("ASSETS_MODE", "kometa"),
+        "run_poster": os.environ.get("RUN_POSTER", "True").lower() == "true",
+        "run_season": os.environ.get("RUN_SEASON", "True").lower() == "true",
+        "run_background": os.environ.get("RUN_BACKGROUND", "False").lower() == "true",
     },
     "cleanup": {
-        "run_process": False
+        "run_process": os.environ.get("RUN_PROCESS", "False").lower() == "true"
     },
     "poster_set": {
-        "max_width": 2000,
-        "max_height": 3000,
-        "min_width": 1000,
-        "min_height": 1500,
-        "prefer_vote": 5.0,
-        "vote_relaxed": 3.5,
-        "vote_threshold": 5.0
+        "max_width": int(os.environ.get("POSTER_MAX_WIDTH", 2000)),
+        "max_height": int(os.environ.get("POSTER_MAX_HEIGHT", 3000)),
+        "min_width": int(os.environ.get("POSTER_MIN_WIDTH", 1000)),
+        "min_height": int(os.environ.get("POSTER_MIN_HEIGHT", 1500)),
+        "prefer_vote": float(os.environ.get("POSTER_PREFER_VOTE", 5.0)),
+        "vote_relaxed": float(os.environ.get("POSTER_VOTE_RELAXED", 3.5)),
+        "vote_threshold": float(os.environ.get("POSTER_VOTE_THRESHOLD", 5.0)),
     },
     "season_set": {
-        "max_width": 2000,
-        "max_height": 3000,
-        "min_width": 1000,
-        "min_height": 1500,
-        "prefer_vote": 5.0,
-        "vote_relaxed": 0.5,
-        "vote_threshold": 3.0
+        "max_width": int(os.environ.get("SEASON_MAX_WIDTH", 2000)),
+        "max_height": int(os.environ.get("SEASON_MAX_HEIGHT", 3000)),
+        "min_width": int(os.environ.get("SEASON_MIN_WIDTH", 1000)),
+        "min_height": int(os.environ.get("SEASON_MIN_HEIGHT", 1500)),
+        "prefer_vote": float(os.environ.get("SEASON_PREFER_VOTE", 5.0)),
+        "vote_relaxed": float(os.environ.get("SEASON_VOTE_RELAXED", 0.5)),
+        "vote_threshold": float(os.environ.get("SEASON_VOTE_THRESHOLD", 3.0)),
     },
     "background_set": {
-        "max_width": 3840,
-        "max_height": 2160,
-        "min_width": 1920,
-        "min_height": 1080,
-        "prefer_vote": 5.0,
-        "vote_relaxed": 3.5,
-        "vote_threshold": 5.0
+        "max_width": int(os.environ.get("BG_MAX_WIDTH", 3840)),
+        "max_height": int(os.environ.get("BG_MAX_HEIGHT", 2160)),
+        "min_width": int(os.environ.get("BG_MIN_WIDTH", 1920)),
+        "min_height": int(os.environ.get("BG_MIN_HEIGHT", 1080)),
+        "prefer_vote": float(os.environ.get("BG_PREFER_VOTE", 5.0)),
+        "vote_relaxed": float(os.environ.get("BG_VOTE_RELAXED", 3.5)),
+        "vote_threshold": float(os.environ.get("BG_VOTE_THRESHOLD", 5.0)),
     },
 }
 
