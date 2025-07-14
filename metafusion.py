@@ -52,7 +52,7 @@ async def metafusion_main():
         orphans_removed = 0
         if feature_flags.get("cleanup", False) and config.get("settings", {}).get("mode", "kometa") == "kometa":
             kometa_root = config.get("settings", {}).get("path", ".")
-            asset_path = str(Path(kometa_root) / "assets")
+            asset_path = Path(kometa_root) / "assets"
             orphans_removed = await cleanup_title_orphans(
                 config=config, asset_path=asset_path,
                 preloaded_plex_metadata=plex_metadata_dict, feature_flags=feature_flags

@@ -2,13 +2,14 @@ import os, yaml
 from pathlib import Path
 from helper.logging import log_config_event
 
-CONFIG_FILE = Path("/config/test/MetaFusion/config.yml")
+BASE_CONFIG_DIR = Path("/config")
+CONFIG_FILE = BASE_CONFIG_DIR / "config.yml"
 
 DEFAULT_CONFIG = {
-    "metafusion_run": os.environ.get("METAFUSION_RUN", True),
+    "metafusion_run": os.environ.get("METAFUSION_RUN", "True").lower() == "true",
     "settings": {
         "schedule": os.environ.get("RUN_SCHEDULE", "True").lower() == "true",
-        "run_times": os.environ.get("RUN_TIMES", "06:00,18:30").split(","),
+        "run_times": [t.strip() for t in os.environ.get("RUN_TIMES", "06:00,18:30").split(",") if t.strip()],
         "dry_run": os.environ.get("DRY_RUN", "False").lower() == "true",
         "log_level": os.environ.get("LOG_LEVEL", "INFO"),
         "mode": os.environ.get("RUN_MODE", "kometa"),

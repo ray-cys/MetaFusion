@@ -547,6 +547,7 @@ def log_asset_status(
 def log_cleanup_event(event, logger=None, **kwargs):
     logger = kwargs.get("logger") or logging.getLogger()
     messages = {
+        "cleanup_skipped_plex_mode": "[Cleanup] Skipping cleanup in Plex mode. Set 'mode' to Kometa to enable cleanup.",
         "cleanup_start": "[Cleanup] Libraries cleanup process starting...",
         "cleanup_error": "[Cleanup] Plex metadata is required but was not provided. Cleanup aborted...",
         "cleanup_removed_cache_entry": "[Cleanup] Removing TMDb cache entry: {key}",
@@ -562,6 +563,7 @@ def log_cleanup_event(event, logger=None, **kwargs):
         "cleanup_dry_run": "[Cleanup] [Dry Run] Would remove {description}: {path}",
     }
     levels = {
+        "cleanup_skipped_plex_mode": "info",
         "cleanup_start": "info",
         "cleanup_error": "error",
         "cleanup_removed_cache_entry": "debug",
