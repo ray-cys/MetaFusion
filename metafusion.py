@@ -1,10 +1,12 @@
 import sys, asyncio, aiohttp, time, schedule
 from datetime import datetime
 from helper.config import load_config_file, get_disabled_features, get_feature_flags
+from helper.plex import connect_plex_library, _plex_cache
+from helper.tmdb import tmdb_response_cache
 from helper.logging import (
     get_setup_logging, get_meta_banner, check_sys_requirements, log_final_summary, log_main_event
 )
-from helper.plex import connect_plex_library
+
 from modules.processing import process_library, plex_metadata_dict
 from modules.cleanup import cleanup_title_orphans
 
@@ -65,6 +67,9 @@ async def metafusion_main():
             orphans_removed, cleanup_title_orphans, selected_libraries, all_libraries, config,
             feature_flags=feature_flags
         )
+    _plex_cache.clear()
+    plex_metadata_dict.clear()
+    tmdb_response_cache.clear()
 
 def run_metafusion_job():
     try:
