@@ -3,7 +3,7 @@ from datetime import datetime
 from pathlib import Path
 from helper.logging import log_cache_event
 
-CACHE_PATH = Path(__file__).parent.parent / "cache"
+CACHE_PATH = Path("/config/cache")
 CACHE_PATH.mkdir(parents=True, exist_ok=True)
 CACHE_FILE = CACHE_PATH / "meta_cache.json"
 
