@@ -2,7 +2,7 @@ import yaml
 from pathlib import Path
 from helper.logging import log_config_event
 
-CONFIG_FILE = Path(__file__).parent.parent / "config.yml"
+CONFIG_FILE = Path("/config/config.yml")
 
 DEFAULT_CONFIG = {
     "metafusion_run": True,
