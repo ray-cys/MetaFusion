@@ -14,10 +14,6 @@ config = load_config_file()
 logger = get_setup_logging(config)
 
 async def metafusion_main():
-    if not config.get("metafusion_run", True):
-        log_main_event("main_processing_disabled")
-        return
-
     get_meta_banner(logger)
     check_sys_requirements(logger, config=config)
     log_main_event(
@@ -82,8 +78,11 @@ if __name__ == "__main__":
     settings = config.get("settings", {})
     run_times = settings.get("run_times", [])
     schedule_enabled = settings.get("schedule", False)
+    metafusion_run = config.get("metafusion_run", True)
 
-    if schedule_enabled and run_times:
+    if metafusion_run:
+        run_metafusion_job()
+    elif schedule_enabled and run_times:
         for t in run_times:
             schedule.every().day.at(t).do(run_metafusion_job)
         log_main_event("main_scheduled_run", run_time=', '.join(run_times), logger=logger)
@@ -91,4 +90,4 @@ if __name__ == "__main__":
             schedule.run_pending()
             time.sleep(30)
     else:
-        run_metafusion_job()
+        log_main_event("main_processing_disabled", logger=logger)

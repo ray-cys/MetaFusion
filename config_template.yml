@@ -1,7 +1,7 @@
 # Plex Metadata Generator & Asset Downloader Configuration Template
 
 # Force run of MetaFusion
-metafusion_run: true
+metafusion_run: false
 
 # Dry run and logging configuration
 settings:
