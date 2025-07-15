@@ -1,20 +1,18 @@
-# For more information, please refer to https://aka.ms/vscode-docker-python
-# For more information on debugging, please refer to https://aka.ms/vscode-docker-python-debug
 FROM python:3-slim
-
-# Keeps Python from generating .pyc files in the container
 ENV PYTHONDONTWRITEBYTECODE=1
-
-# Turns off buffering for easier container logging
 ENV PYTHONUNBUFFERED=1
 
-# Install pip requirements
 COPY requirements.txt .
-RUN python -m pip install -r requirements.txt
+RUN apt-get update && apt-get upgrade -y \
+    && python -m pip install --upgrade pip setuptools \
+    && python -m pip install -r requirements.txt \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY . /app
 RUN mkdir -p /config /config/logs /config/cache
 
-# During debugging, this entry point will be overridden. 
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["python", "metafusion.py"]
