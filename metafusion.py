@@ -50,7 +50,7 @@ async def metafusion_main():
             log_main_event("main_no_libraries")
 
         orphans_removed = 0
-        if feature_flags.get("cleanup", False) and config.get("settings", {}).get("mode", "kometa") == "kometa":
+        if feature_flags.get("cleanup", False):
             kometa_root = config.get("settings", {}).get("path", ".")
             asset_path = Path(kometa_root) / "assets"
             orphans_removed = await cleanup_title_orphans(
