@@ -14,7 +14,7 @@ RUN python -m pip install -r requirements.txt
 
 WORKDIR /app
 COPY . /app
-RUN mkdir -p /app/config /app/config/logs /app/config/cache
+RUN mkdir -p /config /config/logs /config/cache
 
 # During debugging, this entry point will be overridden. 
 CMD ["python", "metafusion.py"]
