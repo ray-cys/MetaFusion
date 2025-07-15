@@ -35,9 +35,7 @@ cache/
 
 # Metadata and assets (user-generated, not source)
 metadata/
-*.jpg
 assets/
-*.yml
 
 # Sensitive or user-specific config
 config.yml
@@ -48,7 +46,6 @@ config.yml
 cache/
 cache/*
 !/cache/.gitkeep
-*.json
 
 # Test output
 test_output/
