@@ -82,17 +82,27 @@ async def process_library(
         log_processing_event("processing_library_items", library_name=library_name, total_items=total_items)
 
         for item in items:
-            meta = await get_plex_metadata(
-                item, 
-                _season_cache=season_cache, 
-                _episode_cache=episode_cache, 
-                _movie_cache=movie_cache
-            )
-            media_type = meta.get("library_type", "").lower()
-            if media_type == "show":
-                media_type = "tv"
-            key = (meta.get("title"), meta.get("year"), media_type)
-            plex_metadata_dict[key] = meta
+            try:
+                meta = await get_plex_metadata(
+                    item, 
+                    _season_cache=season_cache, 
+                    _episode_cache=episode_cache, 
+                    _movie_cache=movie_cache
+                )
+                media_type = meta.get("library_type", "").lower()
+                if media_type == "show":
+                    media_type = "tv"
+                key = (meta.get("title"), meta.get("year"), media_type)
+                plex_metadata_dict[key] = meta
+            except Exception as e:
+                title = getattr(item, "title", None)
+                year = getattr(item, "year", None)
+                media_type = getattr(item, "type", None)
+                if media_type == "show":
+                    media_type = "tv"
+                key = (title, year, media_type)
+                plex_metadata_dict[key] = {}
+                log_processing_event("processing_failed_metadata", title=title, year=year, media_type=media_type, error=str(e))
 
         library_type = getattr(library_section, "type", None)
         if library_type is not None:

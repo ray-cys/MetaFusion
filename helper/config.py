@@ -2,8 +2,28 @@ import os, yaml
 from pathlib import Path
 from helper.logging import log_config_event
 
-BASE_CONFIG_DIR = Path("/config")
+def safe_int(val, default, key=None):
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        if key:
+            log_config_event("invalid_int_env", key=key, value=val, default=default)
+        return default
+
+def safe_float(val, default, key=None):
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        if key:
+            log_config_event("invalid_float_env", key=key, value=val, default=default)
+        return default
+    
+BASE_CONFIG_DIR = Path(os.environ.get("CONFIG_DIR", "/config"))
 CONFIG_FILE = BASE_CONFIG_DIR / "config.yml"
+TEMPLATE_FILE = Path(__file__).parent.parent / "config_template.yml"
+LOGS_DIR = BASE_CONFIG_DIR / "logs"
+LOG_FILE = LOGS_DIR / "metafusion.log"
+CACHE_DIR = BASE_CONFIG_DIR / "cache"
 
 DEFAULT_CONFIG = {
     "metafusion_run": os.environ.get("METAFUSION_RUN", "True").lower() == "true",
@@ -39,31 +59,31 @@ DEFAULT_CONFIG = {
         "run_process": os.environ.get("RUN_PROCESS", "False").lower() == "true"
     },
     "poster_set": {
-        "max_width": int(os.environ.get("POSTER_MAX_WIDTH", 2000)),
-        "max_height": int(os.environ.get("POSTER_MAX_HEIGHT", 3000)),
-        "min_width": int(os.environ.get("POSTER_MIN_WIDTH", 1000)),
-        "min_height": int(os.environ.get("POSTER_MIN_HEIGHT", 1500)),
-        "prefer_vote": float(os.environ.get("POSTER_PREFER_VOTE", 5.0)),
-        "vote_relaxed": float(os.environ.get("POSTER_VOTE_RELAXED", 3.5)),
-        "vote_threshold": float(os.environ.get("POSTER_VOTE_THRESHOLD", 5.0)),
+        "max_width": safe_int(os.environ.get("POSTER_MAX_WIDTH", 2000), 2000, key="POSTER_MAX_WIDTH"),
+        "max_height": safe_int(os.environ.get("POSTER_MAX_HEIGHT", 3000), 3000, key="POSTER_MAX_HEIGHT"),
+        "min_width": safe_int(os.environ.get("POSTER_MIN_WIDTH", 1000), 1000, key="POSTER_MIN_WIDTH"),
+        "min_height": safe_int(os.environ.get("POSTER_MIN_HEIGHT", 1500), 1500, key="POSTER_MIN_HEIGHT"),
+        "prefer_vote": safe_float(os.environ.get("POSTER_PREFER_VOTE", 5.0), 5.0, key="POSTER_PREFER_VOTE"),
+        "vote_relaxed": safe_float(os.environ.get("POSTER_VOTE_RELAXED", 3.5), 3.5, key="POSTER_VOTE_RELAXED"),
+        "vote_threshold": safe_float(os.environ.get("POSTER_VOTE_THRESHOLD", 5.0), 5.0, key="POSTER_VOTE_THRESHOLD"),
     },
     "season_set": {
-        "max_width": int(os.environ.get("SEASON_MAX_WIDTH", 2000)),
-        "max_height": int(os.environ.get("SEASON_MAX_HEIGHT", 3000)),
-        "min_width": int(os.environ.get("SEASON_MIN_WIDTH", 1000)),
-        "min_height": int(os.environ.get("SEASON_MIN_HEIGHT", 1500)),
-        "prefer_vote": float(os.environ.get("SEASON_PREFER_VOTE", 5.0)),
-        "vote_relaxed": float(os.environ.get("SEASON_VOTE_RELAXED", 0.5)),
-        "vote_threshold": float(os.environ.get("SEASON_VOTE_THRESHOLD", 3.0)),
+        "max_width": safe_int(os.environ.get("SEASON_MAX_WIDTH", 2000), 2000, key="SEASON_MAX_WIDTH"),
+        "max_height": safe_int(os.environ.get("SEASON_MAX_HEIGHT", 3000), 3000, key="SEASON_MAX_HEIGHT"),
+        "min_width": safe_int(os.environ.get("SEASON_MIN_WIDTH", 1000), 1000, key="SEASON_MIN_WIDTH"),
+        "min_height": safe_int(os.environ.get("SEASON_MIN_HEIGHT", 1500), 1500, key="SEASON_MIN_HEIGHT"),
+        "prefer_vote": safe_float(os.environ.get("SEASON_PREFER_VOTE", 5.0), 5.0, key="SEASON_PREFER_VOTE"),
+        "vote_relaxed": safe_float(os.environ.get("SEASON_VOTE_RELAXED", 0.5), 0.5, key="SEASON_VOTE_RELAXED"),
+        "vote_threshold": safe_float(os.environ.get("SEASON_VOTE_THRESHOLD", 3.0), 3.0, key="SEASON_VOTE_THRESHOLD"),
     },
     "background_set": {
-        "max_width": int(os.environ.get("BG_MAX_WIDTH", 3840)),
-        "max_height": int(os.environ.get("BG_MAX_HEIGHT", 2160)),
-        "min_width": int(os.environ.get("BG_MIN_WIDTH", 1920)),
-        "min_height": int(os.environ.get("BG_MIN_HEIGHT", 1080)),
-        "prefer_vote": float(os.environ.get("BG_PREFER_VOTE", 5.0)),
-        "vote_relaxed": float(os.environ.get("BG_VOTE_RELAXED", 3.5)),
-        "vote_threshold": float(os.environ.get("BG_VOTE_THRESHOLD", 5.0)),
+        "max_width": safe_int(os.environ.get("BG_MAX_WIDTH", 3840), 3840, key="BG_MAX_WIDTH"),
+        "max_height": safe_int(os.environ.get("BG_MAX_HEIGHT", 2160), 2160, key="BG_MAX_HEIGHT"),
+        "min_width": safe_int(os.environ.get("BG_MIN_WIDTH", 1920), 1920, key="BG_MIN_WIDTH"),
+        "min_height": safe_int(os.environ.get("BG_MIN_HEIGHT", 1080), 1080, key="BG_MIN_HEIGHT"),
+        "prefer_vote": safe_float(os.environ.get("BG_PREFER_VOTE", 5.0), 5.0, key="BG_PREFER_VOTE"),
+        "vote_relaxed": safe_float(os.environ.get("BG_VOTE_RELAXED", 3.5), 3.5, key="BG_VOTE_RELAXED"),
+        "vote_threshold": safe_float(os.environ.get("BG_VOTE_THRESHOLD", 5.0), 5.0, key="BG_VOTE_THRESHOLD"),
     },
 }
 
@@ -117,11 +137,24 @@ def mode_check(config, mode="kometa"):
     return config.get("settings", {}).get("mode", "kometa").lower() == mode.lower()
 
 def load_config_file():
-    if not CONFIG_FILE.exists():
-        template_path = Path(__file__).parent.parent / "config_template.yml"
-        if template_path.exists():
-            import shutil
-            shutil.copy(template_path, CONFIG_FILE)
+    import shutil
+    env_vars = [
+        "METAFUSION_RUN", "RUN_SCHEDULE", "RUN_TIMES", "DRY_RUN", "LOG_LEVEL", "RUN_MODE", "KOMETA_PATH",
+        "PLEX_URL", "PLEX_TOKEN", "PLEX_LIBRARIES",
+        "TMDB_API_KEY", "TMDB_LANGUAGE", "TMDB_LANGUAGE_FALLBACK", "TMDB_REGION",
+        "RUN_BASIC", "RUN_ENHANCED", "RUN_POSTER", "RUN_SEASON", "RUN_BACKGROUND", "RUN_PROCESS",
+        "POSTER_MAX_WIDTH", "POSTER_MAX_HEIGHT", "POSTER_MIN_WIDTH", "POSTER_MIN_HEIGHT",
+        "POSTER_PREFER_VOTE", "POSTER_VOTE_RELAXED", "POSTER_VOTE_THRESHOLD",
+        "SEASON_MAX_WIDTH", "SEASON_MAX_HEIGHT", "SEASON_MIN_WIDTH", "SEASON_MIN_HEIGHT",
+        "SEASON_PREFER_VOTE", "SEASON_VOTE_RELAXED", "SEASON_VOTE_THRESHOLD",
+        "BG_MAX_WIDTH", "BG_MAX_HEIGHT", "BG_MIN_WIDTH", "BG_MIN_HEIGHT",
+        "BG_PREFER_VOTE", "BG_VOTE_RELAXED", "BG_VOTE_THRESHOLD"
+    ]
+    all_env_present = all(os.environ.get(var) is not None for var in env_vars)
+
+    if (not all_env_present or not any(os.environ.get(var) is not None for var in env_vars)) and not CONFIG_FILE.exists():
+        if TEMPLATE_FILE.exists():
+            shutil.copy(TEMPLATE_FILE, CONFIG_FILE)
             log_config_event("yaml_not_found", config_file=CONFIG_FILE)
         else:
             log_config_event("yaml_missing", config_file=CONFIG_FILE)
