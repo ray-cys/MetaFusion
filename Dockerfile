@@ -1,4 +1,5 @@
 # For more information, please refer to https://aka.ms/vscode-docker-python
+# For more information on debugging, please refer to https://aka.ms/vscode-docker-python-debug
 FROM python:3-slim
 
 # Keeps Python from generating .pyc files in the container
@@ -13,7 +14,7 @@ RUN python -m pip install -r requirements.txt
 
 WORKDIR /app
 COPY . /app
+RUN mkdir -p /app/config /app/config/logs /app/config/cache
 
-# During debugging, this entry point will be overridden. For more information, please refer to https://aka.ms/vscode-docker-python-debug
+# During debugging, this entry point will be overridden. 
 CMD ["python", "metafusion.py"]
-# CMD ["tail", "-f", "/dev/null"]
