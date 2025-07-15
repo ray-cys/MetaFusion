@@ -781,7 +781,7 @@ def log_final_summary(
         percent_incomplete = summary.get('percent_incomplete', 100 - summary['percent_complete'])
         lines.extend(box_line(
             f"Metadata - Complete: {summary['complete']}/{summary['total_items']} ({summary['percent_complete']}%), "
-            f"Incomlete: {summary['incomplete']} ({percent_incomplete}%)", box_width))
+            f"Incomplete: {summary['incomplete']} ({percent_incomplete}%)", box_width))
 
         if feature_flags and feature_flags.get("poster", False) and library_type in ("movie", "tv", "show"):
             lines.extend(box_line(
