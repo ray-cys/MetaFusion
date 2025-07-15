@@ -7,7 +7,6 @@ MIN_CPU_CORES = 4
 MIN_RAM_GB = 4
 
 def get_setup_logging(config):
-    import sys, logging
     script_name = Path(sys.argv[0]).stem
     log_file = LOG_FILE
     log_dir = log_file.parent
@@ -202,8 +201,6 @@ def log_config_event(event, logger=None, **kwargs):
         "yaml_missing": "[Configuration] YAMLs not found at {config_file}. Using default configuration.",
         "yaml_parse_error": "[Configuration] Failed to parse YAML at {config_file}. Using default configuration.",
         "config_missing": "[Configuration] Config file {config_file} does not exist. Using default configuration.",
-        "env_override_invalid": "[Configuration] Invalid environment override for {env_key}: '{env_val}' (expected {expected_type}). Keeping previous value: {old_val}",
-        "env_override": "[Configuration] Environment override: {env_key}={env_val} (was {old_val})",
         "config_loaded": "[Configuration] Successfully loaded configuration from {config_file}.",
     }
     levels = {
@@ -217,8 +214,6 @@ def log_config_event(event, logger=None, **kwargs):
         "yaml_missing": "error",
         "yaml_parse_error": "error",
         "config_missing": "warning",
-        "env_override_invalid": "error",
-        "env_override": "debug",
         "config_loaded": "debug",
     }
     msg = messages.get(event, "[Config] Unknown event")
@@ -379,6 +374,7 @@ def log_processing_event(event, logger=None, **kwargs):
         "processing_unsupported_type": "warning",
         "processing_failed_item": "error",
         "processing_library_items": "info",
+        "processing_failed_metadata": "error",
         "processing_failed_parse_yaml": "error",
         "processing_metadata_saved": "debug",
         "processing_cache_saved": "debug",
