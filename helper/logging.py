@@ -1,25 +1,27 @@
 import os, sys, platform, psutil, logging, textwrap, requests
 from pathlib import Path
+from helper.config import LOG_FILE
 
 MIN_PYTHON = (3, 8)
 MIN_CPU_CORES = 4
 MIN_RAM_GB = 4
 
 def get_setup_logging(config):
+    import sys, logging
     script_name = Path(sys.argv[0]).stem
-    log_dir = Path("/config/logs")
+    log_file = LOG_FILE
+    log_dir = log_file.parent
     log_dir.mkdir(parents=True, exist_ok=True)
-    log_file = log_dir / f"{script_name}.log"
 
-    for i in range(5, 0, -1):
-        src = log_dir / f"{script_name}{'' if i == 1 else i-1}.log"
-        dst = log_dir / f"{script_name}{i}.log"
-        if src.exists():
-            if i == 5:
-                src.unlink()
-            else:
-                src.rename(dst)
-    if log_file.exists():
+    if log_file.exists() and log_file.stat().st_size > 0:
+        for i in range(5, 0, -1):
+            src = log_dir / f"{script_name}{'' if i == 1 else i-1}.log"
+            dst = log_dir / f"{script_name}{i}.log"
+            if src.exists():
+                if i == 5:
+                    src.unlink()
+                else:
+                    src.rename(dst)
         log_file.rename(log_dir / f"{script_name}1.log")
 
     log_level_str = config["settings"].get("log_level", "INFO").upper()
@@ -190,6 +192,8 @@ def log_main_event(event, logger=None, **kwargs):
 def log_config_event(event, logger=None, **kwargs):
     logger = kwargs.get("logger") or logging.getLogger()
     messages = {
+        "invalid_int_env": "[Configuration] Invalid environment variable for {key}: '{value}'. Using default: {default}",
+        "invalid_float_env": "[Configuration] Invalid environment variable for {key}: '{value}'. Using default: {default}",
         "feature_disabled": "[Configuration] {feature} is DISABLED and will not be processed.",
         "feature_enabled": "[Configuration] {feature} is ENABLED and will be processed.",
         "unknown_feature": "[Configuration] Unknown configuration settings: {feature}",
@@ -203,6 +207,8 @@ def log_config_event(event, logger=None, **kwargs):
         "config_loaded": "[Configuration] Successfully loaded configuration from {config_file}.",
     }
     levels = {
+        "invalid_int_env": "error",
+        "invalid_float_env": "error",
         "feature_disabled": "info",
         "feature_enabled": "info",
         "unknown_feature": "warning",
@@ -360,6 +366,7 @@ def log_processing_event(event, logger=None, **kwargs):
         "processing_unsupported_type": "[Processing] Unsupported library type for {full_title}. Skipping...",
         "processing_failed_item": "[Processing] Failed to process {full_title}: {error}",
         "processing_library_items": "[Processing] {library_name} library with {total_items} items detected.",
+        "processing_failed_metadata": "[Processing] Failed to process Plex {media_type} for {title} ({year}): {error}",
         "processing_failed_parse_yaml": "[Processing] Failed to parse YAML file: {output_path} ({error})",
         "processing_metadata_saved": "[Processing] Metadata successfully saved to {output_path}",
         "processing_cache_saved": "[Processing] Cache files saved.",
@@ -547,7 +554,7 @@ def log_asset_status(
 def log_cleanup_event(event, logger=None, **kwargs):
     logger = kwargs.get("logger") or logging.getLogger()
     messages = {
-        "cleanup_skipped_plex_mode": "[Cleanup] Skipping cleanup in Plex mode. Set 'mode' to Kometa to enable cleanup.",
+        "cleanup_skipped_plex_mode": "[Cleanup] Skipping metadata and asset removal in Plex mode.",
         "cleanup_start": "[Cleanup] Libraries cleanup process starting...",
         "cleanup_error": "[Cleanup] Plex metadata is required but was not provided. Cleanup aborted...",
         "cleanup_removed_cache_entry": "[Cleanup] Removing TMDb cache entry: {key}",

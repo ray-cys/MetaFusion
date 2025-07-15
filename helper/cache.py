@@ -1,11 +1,11 @@
 import asyncio, json
 from datetime import datetime
 from pathlib import Path
+from helper.config import CACHE_DIR
 from helper.logging import log_cache_event
 
-CACHE_PATH = Path("/config/cache")
-CACHE_PATH.mkdir(parents=True, exist_ok=True)
-CACHE_FILE = CACHE_PATH / "meta_cache.json"
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
+CACHE_FILE = CACHE_DIR / "meta_cache.json"
 
 def load_cache():
     if CACHE_FILE.exists() and CACHE_FILE.stat().st_size > 0:
