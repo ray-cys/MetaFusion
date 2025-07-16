@@ -6,7 +6,7 @@ from helper.plex import get_plex_country
 from helper.tmdb import tmdb_api_request, tmdb_response_cache
 from modules.utils import (
     smart_meta_update, get_meta_field, recursive_season_diff, get_best_poster, get_best_season, get_best_background,
-    smart_asset_upgrade, smart_season_asset_upgrade, asset_temp_path, download_poster, get_asset_path
+    smart_asset_upgrade, smart_season_asset_upgrade, asset_temp_path, download_poster, get_asset_path, format_runtime
 )
 
 async def build_movie(
@@ -32,7 +32,6 @@ async def build_movie(
     full_title = f"{title} ({year})"
     cache_key = f"movie:{title}:{year}"
     movie_path = meta.get("movie_path") if meta else None
-    library_type = meta.get("library_type", "movie") if meta else "movie"
     tmdb_id = meta.get("tmdb_id") if meta else None
     imdb_id = meta.get("imdb_id") if meta else None
     mapping_id = None
@@ -92,7 +91,7 @@ async def build_movie(
     countries = [get_plex_country(code) for code in country_codes]
 
     originally_available = release_date or ""
-    runtime = get_meta_field(details, "runtime", None)
+    runtime = format_runtime(get_meta_field(details, "runtime", None))
 
     collection_info = get_meta_field(details, "belongs_to_collection", {})
     collection_id = get_meta_field(collection_info, "id", None)
@@ -436,7 +435,6 @@ async def build_tv(
     cache_key = f"tv:{title}:{year}"
     show_path = meta.get("show_path") if meta else None
     seasons_episodes = meta.get("seasons_episodes") if meta else None
-    library_type = meta.get("library_type", "tv") if meta else "tv"
     tmdb_id = meta.get("tmdb_id") if meta else None
     tvdb_id = meta.get("tvdb_id") if meta else None
     imdb_id = meta.get("imdb_id") if meta else None
@@ -623,7 +621,7 @@ async def build_tv(
                 ep_guest_stars = []
     
             ep_air_date = get_meta_field(episode, "air_date", "") or ""
-            ep_runtime = get_meta_field(episode, "runtime", None)
+            ep_runtime = format_runtime(get_meta_field(episode, "runtime", None))
     
             ep_basic_fields = ["sort_title", "original_title", "originally_available", "runtime", "summary"]
             ep_enhanced_fields = ["cast.sync", "guest", "director.sync", "writer.sync"]
