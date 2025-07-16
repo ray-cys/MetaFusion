@@ -489,5 +489,5 @@ def format_runtime(minutes):
             return f"{hours} hr{'s' if hours > 1 else ''} {mins} min{'s' if mins != 1 else ''}"
         else:
             return f"{mins} min{'s' if mins != 1 else ''}"
-    except Exception:
+    except (ValueError, TypeError):
         return str(minutes)
