@@ -43,15 +43,15 @@ async def cleanup_title_orphans(
                 year = year.strip()
             except Exception:
                 pass
-        if title and year:
-            removed_summary.setdefault((title, year), {"cache": False, "asset": [], "yaml": False})
-            removed_summary[(title, year)]["cache"] = True
         if feature_flags.get("dry_run", False):
             log_cleanup_event("cleanup_dry_run", description="cache", path=key)
         else:
             log_cleanup_event("cleanup_removed_cache_entry", key=key)
             del cache[key]
             orphans_removed += 1
+            if title and year:
+                removed_summary.setdefault((title, year), {"cache": False, "asset": [], "yaml": False})
+                removed_summary[(title, year)]["cache"] = True
     save_cache(cache)
 
     if mode == "plex":
@@ -94,11 +94,6 @@ async def cleanup_title_orphans(
                 orphans_in_file = len(metadata_entries) - len(cleaned_metadata)
 
                 if orphans_in_file > 0:
-                    for orphan_title in set(metadata_entries) - set(cleaned_metadata):
-                        t, y = extract_title_year(orphan_title)
-                        if t and y:
-                            removed_summary.setdefault((t, y), {"cache": False, "asset": [], "yaml": False})
-                            removed_summary[(t, y)]["yaml"] = True
                     if feature_flags.get("dry_run", False):
                         log_cleanup_event("cleanup_dry_run", description=cleaned_metadata, path=metadata_file)
                     else:
@@ -106,6 +101,11 @@ async def cleanup_title_orphans(
                         with open(metadata_file, "w", encoding="utf-8") as f:
                             yaml.dump(metadata_content, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
                         log_cleanup_event("cleanup_removed_orphans", orphans_in_file=orphans_in_file, filename=metadata_file.name)
+                        for orphan_title in set(metadata_entries) - set(cleaned_metadata):
+                            t, y = extract_title_year(orphan_title)
+                            if t and y:
+                                removed_summary.setdefault((t, y), {"cache": False, "asset": [], "yaml": False})
+                                removed_summary[(t, y)]["yaml"] = True
                     orphans_removed += orphans_in_file
 
             except Exception as e:

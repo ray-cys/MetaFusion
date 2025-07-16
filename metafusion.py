@@ -1,4 +1,4 @@
-import sys, asyncio, aiohttp, time, schedule
+import sys, asyncio, aiohttp, time, schedule, argparse
 from pathlib import Path
 from datetime import datetime
 from helper.config import load_config_file, get_disabled_features, get_feature_flags
@@ -10,7 +10,45 @@ from helper.logging import (
 from modules.processing import process_library, plex_metadata_dict
 from modules.cleanup import cleanup_title_orphans
 
+def parse_cli_args():
+    parser = argparse.ArgumentParser(description="MetaFusion CLI Command Overrides")
+    parser.add_argument("--metafusion_run", type=str, choices=["true", "false"], help="Run MetaFusion job")
+    parser.add_argument("--schedule", type=str, choices=["true", "false"], help="Enable schedule")
+    parser.add_argument("--run_times", type=str, help="Comma-separated run times (e.g. 06:00,18:30)")
+    parser.add_argument("--dry_run", type=str, choices=["true", "false"], help="Dry run mode")
+    parser.add_argument("--mode", type=str, choices=["kometa", "plex"], help="Run mode")
+    parser.add_argument("--run_basic", type=str, choices=["true", "false"], help="Run basic metadata extraction")
+    parser.add_argument("--run_enhanced", type=str, choices=["true", "false"], help="Run enhanced metadata extraction")
+    parser.add_argument("--run_poster", type=str, choices=["true", "false"], help="Run poster asset download")
+    parser.add_argument("--run_season", type=str, choices=["true", "false"], help="Run season asset download")
+    parser.add_argument("--run_background", type=str, choices=["true", "false"], help="Run background asset download")
+    return parser.parse_args()
+
+def override_config_with_cli(config, args):
+    if args.metafusion_run is not None:
+        config["metafusion_run"] = args.metafusion_run.lower() == "true"
+    if args.schedule is not None:
+        config["settings"]["schedule"] = args.schedule.lower() == "true"
+    if args.run_times is not None:
+        config["settings"]["run_times"] = [t.strip() for t in args.run_times.split(",") if t.strip()]
+    if args.dry_run is not None:
+        config["settings"]["dry_run"] = args.dry_run.lower() == "true"
+    if args.mode is not None:
+        config["settings"]["mode"] = args.mode
+    if args.run_basic is not None:
+        config["metadata"]["run_basic"] = args.run_basic.lower() == "true"
+    if args.run_enhanced is not None:
+        config["metadata"]["run_enhanced"] = args.run_enhanced.lower() == "true"
+    if args.run_poster is not None:
+        config["assets"]["run_poster"] = args.run_poster.lower() == "true"
+    if args.run_season is not None:
+        config["assets"]["run_season"] = args.run_season.lower() == "true"
+    if args.run_background is not None:
+        config["assets"]["run_background"] = args.run_background.lower() == "true"
+        
+args = parse_cli_args()
 config = load_config_file()
+override_config_with_cli(config, args)
 logger = get_setup_logging(config)
 
 async def metafusion_main():

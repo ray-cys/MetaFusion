@@ -7,7 +7,7 @@ def safe_int(val, default, key=None):
         return int(val)
     except (TypeError, ValueError):
         if key:
-            log_config_event("invalid_int_env", key=key, value=val, default=default)
+            log_config_event("invalid_env_var", key=key, value=val, default=default)
         return default
 
 def safe_float(val, default, key=None):
@@ -15,7 +15,7 @@ def safe_float(val, default, key=None):
         return float(val)
     except (TypeError, ValueError):
         if key:
-            log_config_event("invalid_float_env", key=key, value=val, default=default)
+            log_config_event("invalid_env_var", key=key, value=val, default=default)
         return default
     
 BASE_CONFIG_DIR = Path(os.environ.get("CONFIG_DIR", "/config"))

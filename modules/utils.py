@@ -477,3 +477,17 @@ async def save_poster(image_content, save_path):
         return True, None
     except Exception as e:
         return False, str(e)
+
+def format_runtime(minutes):
+    if minutes is None or minutes == "":
+        return ""
+    try:
+        minutes = int(minutes)
+        hours = minutes // 60
+        mins = minutes % 60
+        if hours > 0:
+            return f"{hours} hr{'s' if hours > 1 else ''} {mins} min{'s' if mins != 1 else ''}"
+        else:
+            return f"{mins} min{'s' if mins != 1 else ''}"
+    except Exception:
+        return str(minutes)
