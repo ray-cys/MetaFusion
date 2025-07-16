@@ -24,7 +24,10 @@ def get_setup_logging(config):
                     src.unlink()
                 else:
                     src.rename(dst)
-        log_file.rename(log_dir / f"{script_name}1.log")
+        try:
+            log_file.rename(log_dir / f"{script_name}1.log")
+        except FileNotFoundError:
+            pass
 
     log_level_str = config["settings"].get("log_level", "INFO").upper()
     log_level = getattr(logging, log_level_str, logging.INFO)
