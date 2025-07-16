@@ -1,7 +1,9 @@
 import os, sys, platform, psutil, logging, textwrap, requests
 from pathlib import Path
-from helper.config import LOG_FILE
 
+BASE_CONFIG_DIR = Path(os.environ.get("CONFIG_DIR", "/config"))
+LOGS_DIR = BASE_CONFIG_DIR / "logs"
+LOG_FILE = LOGS_DIR / "metafusion.log"
 MIN_PYTHON = (3, 8)
 MIN_CPU_CORES = 4
 MIN_RAM_GB = 4
