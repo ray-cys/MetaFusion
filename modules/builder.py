@@ -498,9 +498,9 @@ async def build_tv(
 
     show_basic_fields = [
         "sort_title", "original_title", "originally_available", "content_rating",
-        "studio", "summary", "country.sync", "genre.sync", "seasons"
+        "studio", "tagline", "summary", "country.sync", "genre.sync", "seasons"
     ]
-    show_enhanced_fields = ["tagline"]
+    show_enhanced_fields = []
     show_fields_to_write = show_basic_fields + (show_enhanced_fields if feature_flags.get("metadata_enhanced", True) else [])
 
     episode_basic_fields = ["sort_title", "originally_available", "runtime", "summary"]

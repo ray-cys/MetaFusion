@@ -3,7 +3,7 @@
   <Name>metafusion</Name>
   <Repository>ghcr.io/ray-cys/metafusion:main</Repository>
   <Registry/>
-  <Network>proxy</Network>
+  <Network>bridge</Network>
   <MyIP/>
   <Shell>sh</Shell>
   <Privileged>false</Privileged>
@@ -21,19 +21,17 @@
   <DonateText/>
   <DonateLink/>
   <Requires/>
+  <Config Name="PLEX_URL" Target="PLEX_URL" Default="http://10.0.0.1:32400" Mode="" Description="URL of your Plex Media Server." Type="Variable" Display="always" Required="true" Mask="false"></Config>
+  <Config Name="PLEX_TOKEN" Target="PLEX_TOKEN" Default="" Mode="" Description="Plex API token (keep secret)." Type="Variable" Display="always" Required="true" Mask="true"></Config>
+  <Config Name="TMDB_API_KEY" Target="TMDB_API_KEY" Default="" Mode="" Description="TMDb API key (keep secret)." Type="Variable" Display="always" Required="true" Mask="true"></Config>
+  <Config Name="RUN_MODE" Target="RUN_MODE" Default="kometa" Mode="" Description="Set to 'kometa' or 'plex' to control operation mode." Type="Variable" Display="always" Required="false" Mask="false">kometa</Config>
   <Config Name="CONFIG_DIR*" Target="/config" Default="" Mode="rw" Description="Path to store MetaFusion configuration, cache, and logs. (Required)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/metafusion</Config>
-  <Config Name="KOMETA_PATH" Target="/kometa" Default="" Mode="rw" Description="Path for storing assets and metadata when in Kometa mode." Type="Path" Display="advanced" Required="false" Mask="false">/mnt/user/appdata/kometa/</Config>
-  <Config Name="PUID" Target="PUID" Default="" Mode="" Description="" Type="Variable" Display="always" Required="false" Mask="false">99</Config>
-  <Config Name="PGID" Target="PGID" Default="" Mode="" Description="" Type="Variable" Display="always" Required="false" Mask="false">100</Config>
-  <Config Name="TZ" Target="TZ" Default="UTC" Mode="" Description="Container timezone." Type="Variable" Display="advanced" Required="false" Mask="false">UTC</Config>
-  <Config Name="PLEX_URL" Target="PLEX_URL" Default="http://10.0.0.1:32400" Mode="" Description="URL of your Plex Media Server." Type="Variable" Display="advanced" Required="true" Mask="false"></Config>
-  <Config Name="PLEX_TOKEN" Target="PLEX_TOKEN" Default="" Mode="" Description="Plex API token (keep secret)." Type="Variable" Display="advanced" Required="true" Mask="true"></Config>
+  <Config Name="KOMETA_PATH" Target="/kometa" Default="" Mode="rw" Description="Path for storing assets and metadata when in Kometa mode." Type="Path" Display="always" Required="false" Mask="false">/mnt/user/appdata/kometa/</Config>
+  <Config Name="METAFUSION_RUN" Target="METAFUSION_RUN" Default="false" Mode="" Description="Force run MetaFusion." Type="Variable" Display="always" Required="false" Mask="false"></Config>
   <Config Name="PLEX_LIBRARIES" Target="PLEX_LIBRARIES" Default="Movies,TV Shows" Mode="" Description="Comma-separated list of Plex libraries to process." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
-  <Config Name="TMDB_API_KEY" Target="TMDB_API_KEY" Default="" Mode="" Description="TMDb API key (keep secret)." Type="Variable" Display="advanced" Required="true" Mask="true"></Config>
   <Config Name="TMDB_LANGUAGE" Target="TMDB_LANGUAGE" Default="en" Mode="" Description="Preferred language for TMDb metadata." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
   <Config Name="TMDB_REGION" Target="TMDB_REGION" Default="US" Mode="" Description="Preferred region for TMDb metadata." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
   <Config Name="TMDB_LANGUAGE_FALLBACK" Target="TMDB_LANGUAGE_FALLBACK" Default="zh,ja" Mode="" Description="Comma-separated fallback languages for TMDb." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
-  <Config Name="RUN_MODE" Target="RUN_MODE" Default="kometa" Mode="" Description="Set to 'kometa' or 'plex' to control operation mode." Type="Variable" Display="advanced" Required="false" Mask="false">kometa</Config>
   <Config Name="DRY_RUN" Target="DRY_RUN" Default="False" Mode="" Description="Enable dry run mode (no files will be written)." Type="Variable" Display="advanced" Required="false" Mask="false">False</Config>
   <Config Name="RUN_SCHEDULE" Target="RUN_SCHEDULE" Default="True" Mode="" Description="Enable scheduled runs." Type="Variable" Display="advanced" Required="false" Mask="false">True</Config>
   <Config Name="RUN_TIMES" Target="RUN_TIMES" Default="06:00,18:30" Mode="" Description="Comma-separated times for scheduled runs (24h format)." Type="Variable" Display="advanced" Required="false" Mask="false">06:00,18:30</Config>
