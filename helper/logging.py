@@ -194,21 +194,19 @@ def log_main_event(event, logger=None, **kwargs):
 def log_config_event(event, logger=None, **kwargs):
     logger = kwargs.get("logger") or logging.getLogger()
     messages = {
-        "invalid_int_env": "[Configuration] Invalid environment variable for {key}: '{value}'. Using default: {default}",
-        "invalid_float_env": "[Configuration] Invalid environment variable for {key}: '{value}'. Using default: {default}",
+        "invalid_env_var": "[Configuration] Invalid environment variable for {key}: '{value}'. Using default: {default}",
         "feature_disabled": "[Configuration] {feature} is DISABLED and will not be processed.",
         "feature_enabled": "[Configuration] {feature} is ENABLED and will be processed.",
         "unknown_feature": "[Configuration] Unknown configuration settings: {feature}",
-        "unknown_key": "[Configuration] Unknown config key in config.yml: {key}",
-        "yaml_not_found": "[Configuration] YAML not found at {config_file}. Copying template to {config_file}. Review and edit configuration.",
-        "yaml_missing": "[Configuration] YAMLs not found at {config_file}. Using default configuration.",
-        "yaml_parse_error": "[Configuration] Failed to parse YAML at {config_file}. Using default configuration.",
-        "config_missing": "[Configuration] Config file {config_file} does not exist. Using default configuration.",
+        "unknown_key": "[Configuration] Unknown configuration key: {key}",
+        "yaml_not_found": "[Configuration] YAML not found at {config_file}. Copying template to {config_file}...",
+        "yaml_missing": "[Configuration] YAMLs not found at {config_file}. Using default...",
+        "yaml_parse_error": "[Configuration] Failed to parse YAML at {config_file}. Using default...",
+        "config_missing": "[Configuration] Config file {config_file} does not exist. Using default...",
         "config_loaded": "[Configuration] Successfully loaded configuration from {config_file}.",
     }
     levels = {
-        "invalid_int_env": "error",
-        "invalid_float_env": "error",
+        "invalid_env_var": "error",
         "feature_disabled": "info",
         "feature_enabled": "info",
         "unknown_feature": "warning",
@@ -266,8 +264,8 @@ def log_cache_event(event, logger=None, **kwargs):
 def log_plex_event(event, logger=None, **kwargs):
     logger = kwargs.get("logger") or logging.getLogger()
     messages = {
-        "plex_connected": "[Plex] Successfully connected to Plex Media Server version: {version}.",
-        "plex_connect_failed": "[Plex] Failed to connect to Plex Media Server: {error}",
+        "plex_connected": "[Plex] Successfully connected to server version: {version}.",
+        "plex_connect_failed": "[Plex] Failed to connect to server: {error}",
         "plex_libraries_retrieved_failed": "[Plex] Failed to retrieve libraries: {error}",
         "plex_detected_and_skipped_libraries": "[Plex] Libraries - Detected [ {detected} ] Skipped [ {skipped} ]",
         "plex_no_libraries_found": "[Plex] No libraries found. Exiting.",
@@ -275,13 +273,9 @@ def log_plex_event(event, logger=None, **kwargs):
         "plex_failed_extract_library_type": "[Plex] Failed to extract library type for {library_name}: {error}",
         "plex_failed_extract_ids": "[Plex] Failed to extract TMDb, IMDb, TVDb IDs for {title} ({year}): {error}",
         "plex_missing_ids": "[Plex] Missing IDs for {title} ({year}): {missing_ids}. Extracted: {found_ids}",
-        "plex_failed_extract_movie_path": "[Plex] Failed to extract movie directory for {title} ({year}): {error}",
-        "plex_failed_extract_show_path": "[Plex] Failed to extract show directory for {title} ({year}): {error}",
+        "plex_failed_extract_movie_path": "[Plex] Failed to extract movie path for {title} ({year}): {error}",
+        "plex_failed_extract_show_path": "[Plex] Failed to extract show path for {title} ({year}): {error}",
         "plex_failed_extract_seasons_episodes": "[Plex] Failed to extract seasons/episodes for {title} ({year}): {error}",
-        "plex_failed_extract_directors": "[Plex] Failed to extract directors for {title} ({year}): {error}",
-        "plex_failed_extract_writers": "[Plex] Failed to extract writers for {title} ({year}): {error}",
-        "plex_failed_extract_producers": "[Plex] Failed to extract producers for {title} ({year}): {error}",
-        "plex_failed_extract_roles": "[Plex] Failed to extract roles for {title} ({year}): {error}",
         "plex_critical_metadata_missing": "[Plex] Critical metadata missing for item [ratingKey={item_key}]: {missing_critical}. Extracted: {result}",
     }
     levels = {
@@ -297,10 +291,6 @@ def log_plex_event(event, logger=None, **kwargs):
         "plex_failed_extract_movie_path": "warning",
         "plex_failed_extract_show_path": "warning",
         "plex_failed_extract_seasons_episodes": "warning",
-        "plex_failed_extract_directors": "warning",
-        "plex_failed_extract_writers": "warning",
-        "plex_failed_extract_producers": "warning",
-        "plex_failed_extract_roles": "warning",
         "plex_critical_metadata_missing": "warning",
     }
     msg = messages.get(event, "[Plex] Unknown event")
@@ -323,7 +313,7 @@ def log_tmdb_event(event, logger=None, **kwargs):
     messages = {
         "tmdb_no_api_key": "[TMDb] No API key found in config: {tmdb_config}",
         "tmdb_cache_hit": "[TMDb] Returning cached response for {url} params: {params}",
-        "tmdb_request": "[TMDb] Making request to {url} with params: {query} (Attempt {attempt}/{retries})",
+        "tmdb_request": "[TMDb] Requesting {url} with params: {query} (Attempt {attempt}/{retries})",
         "tmdb_success": "[TMDb] Successful response for {url} (Attempt {attempt})",
         "tmdb_rate_limited": "[TMDb] Rate limited (HTTP 429). Sleeping {retry_after}s before retry... Params: {query}",
         "tmdb_non_200": "[TMDb] Non-200 response {status} for {url} params: {query} body: {body}",
@@ -364,11 +354,11 @@ def log_processing_event(event, logger=None, **kwargs):
         "processing_unsupported_type": "[Processing] Unsupported library type for {full_title}. Skipping...",
         "processing_failed_item": "[Processing] Failed to process {full_title}: {error}",
         "processing_library_items": "[Processing] {library_name} library with {total_items} items detected.",
-        "processing_failed_metadata": "[Processing] Failed to process Plex {media_type} for {title} ({year}): {error}",
+        "processing_failed_metadata": "[Processing] Failed to process {media_type} for {title} ({year}): {error}",
         "processing_failed_parse_yaml": "[Processing] Failed to parse YAML file: {output_path} ({error})",
-        "processing_metadata_saved": "[Processing] Metadata successfully saved to {output_path}",
+        "processing_metadata_saved": "[Processing] YAML successfully saved to {output_path}",
         "processing_cache_saved": "[Processing] Cache files saved.",
-        "processing_failed_write_metadata": "[Processing] Failed to write metadata: {error}",
+        "processing_failed_write_metadata": "[Processing] Failed to write YAML: {error}",
         "processing_metadata_dry_run": "[Dry Run] Metadata for {library_name} generated but not saved.",
         "processing_failed_library": "[Processing] Failed to process library '{library_name}': {error}",
     }
@@ -403,35 +393,35 @@ def log_processing_event(event, logger=None, **kwargs):
 def log_builder_event(event, logger=None, **kwargs):
     logger = kwargs.get("logger") or logging.getLogger()
     messages = {
-        "builder_missing_tmdb_and_imdb_id": "[{media_type}] Missing TMDb or IMDb ID for {full_title}. Skipping...",
-        "builder_missing_tvdb_id_and_tmdb_id": "[{media_type}] Missing TVDb and TMDb ID for {full_title}. Skipping...",
-        "builder_no_tmdb_season_data": "[{media_type}] Missing TMDb data for Season {season_number} of {full_title}. Skipping...",
-        "builder_no_metadata_changes": "[{media_type}] No metadata changes for {full_title}, ({percent}%) / ({incomplete_percent}%) completed. Skipping updates...",
-        "build_metadata_changed": "[{media_type}] Metadata updated for {full_title} ({percent}%) using TMDb ID {tmdb_id}. Fields changed: {changes}",
-        "builder_no_existing_metadata": "[{media_type}] No existing metadata for {full_title}. Creating new entries using TMDb ID {tmdb_id}...",
+        "builder_missing_tmdb_and_imdb_id": "[{media_type}] Missing TMDb or IMDb ID: {full_title}. Skipping...",
+        "builder_missing_tvdb_id_and_tmdb_id": "[{media_type}] Missing TVDb and TMDb ID: {full_title}. Skipping...",
+        "builder_no_tmdb_season_data": "[{media_type}] Missing TMDb data: {full_title} of Season {season_number}. Skipping...",
+        "builder_no_metadata_changes": "[{media_type}] No metadata changes detected: {full_title}, ({percent}%/{incomplete_percent}%) completed. Skipping updates...",
+        "build_metadata_changed": "[{media_type}] Metadata updated: {full_title} ({percent}%), TMDb ID: {tmdb_id}, Fields updated: {changes}",
+        "builder_no_existing_metadata": "[{media_type}] No existing metadata: {full_title}. Creating new entries using TMDb ID {tmdb_id}...",
         "builder_dry_run_metadata": "[Dry Run] Would build metadata for {media_type}: {full_title}",
         "builder_metadata_cached": "[{media_type}] {full_title} cached as {cache_key}...",
         "builder_dry_run_asset": "[Dry Run] Would build {asset_type} asset for {media_type}: {full_title}",
-        "builder_no_asset_path": "[{media_type}] Asset path could not be determined for {full_title} {extra}. Skipping...",
-        "builder_no_suitable_asset": "[{media_type}] No suitable TMDb {asset_type} found for {full_title} {extra}. Skipping...",
-        "builder_downloading_asset": "[{media_type}] Downloading {asset_type} for {full_title} ({filesize}) from TMDb.",
-        "builder_asset_download_failed": "[{media_type}] Downloading {asset_type} failed for {full_title} (Status: {status}) Error: {error}",
-        "builder_asset_upgraded": "[{media_type}] Upgraded {asset_type} for {full_title} ({filesize}): {reason}",
-        "builder_already_up_to_date": "[{media_type}] No {asset_type} download needed for {full_title} ({filesize}). Skipping...",
-        "builder_no_upgrade_needed": "[{media_type}] No {asset_type} upgrade needed for {full_title} ({filesize}). Skipping...",
-        "builder_no_image_for_compare": "[{media_type}] No image comparison done for {full_title} {extra}. Skipping...",
-        "builder_error_image_compare": "[{media_type}] Failed to read temp image comparison for {full_title} {extra}: {error}",
+        "builder_no_asset_path": "[{media_type}] Asset path could not be determined: {full_title} {extra}. Skipping...",
+        "builder_no_suitable_asset": "[{media_type}] No suitable TMDb {asset_type} found: {full_title} {extra}. Skipping...",
+        "builder_downloading_asset": "[{media_type}] Downloading TMDb {asset_type}: {full_title} ({filesize})...",
+        "builder_asset_download_failed": "[{media_type}] Downloading TMDb {asset_type} failed: {full_title} (Status: {status}) Error: {error}",
+        "builder_asset_upgraded": "[{media_type}] Upgrading TMDb {asset_type}: {full_title} ({filesize}), {reason}",
+        "builder_already_up_to_date": "[{media_type}] No {asset_type} changes detected: {full_title} ({filesize}). Skipping...",
+        "builder_no_upgrade_needed": "[{media_type}] No {asset_type} changes detected: {full_title} ({filesize}). Skipping...",
+        "builder_no_image_for_compare": "[{media_type}] No image comparison: {full_title} {extra}. Skipping...",
+        "builder_error_image_compare": "[{media_type}] Failed to compare temp image checksum: {full_title} {extra}, {error}",
         "builder_dry_run_asset_season": "[Dry Run] Would build {asset_type} asset for {media_type} Season {season_number}: {full_title}",
-        "builder_no_asset_path_season": "[{media_type}] No asset path found for {full_title} Season {season_number}. Skipping...",
-        "builder_no_season_details": "[{media_type}] No season details for {full_title} Season {season_number}. Skipping...",
-        "builder_no_suitable_asset_season": "[{media_type}] No suitable TMDb {asset_type} found for {full_title} Season {season_number}. Skipping...",
-        "builder_downloading_asset_season": "[{media_type}] Downloading {asset_type} for {full_title} Season {season_number} ({filesize}) from TMDb.",
-        "builder_asset_download_failed_season": "[{media_type}] Downloading {asset_type} failed for {full_title} Season {season_number} (Status: {status}) Error: {error}",
-        "builder_asset_upgraded_season": "[{media_type}] Upgraded {asset_type} for {full_title} Season {season_number} ({filesize}): {reason}",
-        "builder_already_up_to_date_season": "[{media_type}] No {asset_type} download needed for {full_title} Season {season_number} ({filesize}). Skipping...",
-        "builder_no_upgrade_needed_season": "[{media_type}] No {asset_type} upgrade needed for {full_title} Season {season_number} ({filesize}). Skipping...",
-        "builder_no_image_for_compare_season": "[{media_type}] No image comparison done for {full_title} Season {season_number}. Skipping...",
-        "builder_error_image_compare_season": "[{media_type}] Failed to read temp image comparison for {full_title} Season {season_number}: {error}",
+        "builder_no_asset_path_season": "[{media_type}] Asset path could not be determined: {full_title} Season {season_number}. Skipping...",
+        "builder_no_season_details": "[{media_type}] No season details in library: {full_title} Season {season_number}. Skipping...",
+        "builder_no_suitable_asset_season": "[{media_type}] No suitable TMDb season {asset_type} found: {full_title} Season {season_number}. Skipping...",
+        "builder_downloading_asset_season": "[{media_type}] Downloading TMDb season {asset_type}: {full_title} Season {season_number} ({filesize})...",
+        "builder_asset_download_failed_season": "[{media_type}] Downloading TMDb season {asset_type} failed: {full_title} Season {season_number} (Status: {status}) Error: {error}",
+        "builder_asset_upgraded_season": "[{media_type}] Upgrading TMDb season {asset_type}: {full_title} Season {season_number} ({filesize}), {reason}",
+        "builder_already_up_to_date_season": "[{media_type}] No season {asset_type} changes detected: {full_title} Season {season_number} ({filesize}). Skipping...",
+        "builder_no_upgrade_needed_season": "[{media_type}] No seaon {asset_type} changes detected:{full_title} Season {season_number} ({filesize}). Skipping...",
+        "builder_no_image_for_compare_season": "[{media_type}] No image comparison: {full_title} Season {season_number}. Skipping...",
+        "builder_error_image_compare_season": "[{media_type}] Failed to compare temp image checksum: {full_title} Season {season_number}: {error}",
     }
     levels = {
         "builder_missing_tmdb_and_imdb_id": "warning",
@@ -479,7 +469,7 @@ def log_builder_event(event, logger=None, **kwargs):
         elif status_code == "UPGRADE_RELAXED":
             reason = f"TMDb vote: {context.get('new_votes')} (Relaxed: {context.get('vote_relaxed')})"
         elif status_code == "UPGRADE_DIMENSIONS":
-            reason = f"New dimensions: {context.get('new_width')}x{context.get('new_height')}, Existing: {context.get('existing_width', '?')}x{context.get('existing_height', '?')}"
+            reason = f"TMDb dimensions: {context.get('new_width')}x{context.get('new_height')}, Existing: {context.get('existing_width', '?')}x{context.get('existing_height', '?')}"
         else:
             reason = ""
         kwargs["reason"] = reason
@@ -498,7 +488,7 @@ def log_builder_event(event, logger=None, **kwargs):
         elif status_code == "UPGRADE_RELAXED_SEASON":
             reason = f"TMDb vote: {context.get('new_votes')} (Relaxed: {context.get('vote_relaxed')})"
         elif status_code == "UPGRADE_DIMENSIONS_SEASON":
-            reason = f"New dimensions: {context.get('new_width')}x{context.get('new_height')}, Existing: {context.get('existing_width', '?')}x{context.get('existing_height', '?')}"
+            reason = f"TMDb dimensions: {context.get('new_width')}x{context.get('new_height')}, Existing: {context.get('existing_width', '?')}x{context.get('existing_height', '?')}"
         else:
             reason = ""
         kwargs["reason"] = reason
@@ -553,26 +543,26 @@ def log_asset_status(
 def log_cleanup_event(event, logger=None, **kwargs):
     logger = kwargs.get("logger") or logging.getLogger()
     messages = {
-        "cleanup_skipped_plex_mode": "[Cleanup] Skipping metadata and asset removal in Plex mode.",
         "cleanup_start": "[Cleanup] Libraries cleanup process starting...",
         "cleanup_error": "[Cleanup] Plex metadata is required but was not provided. Cleanup aborted...",
         "cleanup_removed_cache_entry": "[Cleanup] Removing TMDb cache entry: {key}",
+        "cleanup_skipped_plex_mode": "[Cleanup] Skipping metadata and asset removal in Plex mode.",
         "cleanup_skipping_nonpreferred": "[Cleanup] Skipping non-preferred library: {filename}",
-        "cleanup_removed_orphans": "[Cleanup] Removing {orphans_in_file} entries from {filename}",
+        "cleanup_removed_orphans": "[Cleanup] Removing {orphans_in_file} entries: {filename}",
         "cleanup_failed_remove_metadata": "[Cleanup] Failed to remove {filename}: {error}",
         "cleanup_skipping_valid_asset": "[Cleanup] Skipping valid asset {description}: {path}",
         "cleanup_removing_asset": "[Cleanup] Removing {description} asset: {path}",
-        "cleanup_removing_empty_dir": "[Cleanup] Removing empty directory from disk: {parent}",
+        "cleanup_removing_empty_dir": "[Cleanup] Removing empty asset path: {parent}",
         "cleanup_failed_remove_asset": "[Cleanup] Failed to remove {description} {path}: {error}",
         "cleanup_consolidated_removed": "[Cleanup] {summary}",
         "cleanup_total_removed": "[Cleanup] Total titles removed: {orphans_removed}",
         "cleanup_dry_run": "[Cleanup] [Dry Run] Would remove {description}: {path}",
     }
     levels = {
-        "cleanup_skipped_plex_mode": "info",
         "cleanup_start": "info",
         "cleanup_error": "error",
         "cleanup_removed_cache_entry": "debug",
+        "cleanup_skipped_plex_mode": "info",
         "cleanup_skipping_nonpreferred": "info",
         "cleanup_removed_orphans": "debug",
         "cleanup_failed_remove_metadata": "error",
