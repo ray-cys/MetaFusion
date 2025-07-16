@@ -3,6 +3,7 @@ from pathlib import Path
 
 BASE_CONFIG_DIR = Path(os.environ.get("CONFIG_DIR", "/config"))
 LOGS_DIR = BASE_CONFIG_DIR / "logs"
+LOGS_DIR.mkdir(parents=True, exist_ok=True)
 LOG_FILE = LOGS_DIR / "metafusion.log"
 MIN_PYTHON = (3, 8)
 MIN_CPU_CORES = 4
