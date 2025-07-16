@@ -422,7 +422,7 @@ def log_builder_event(event, logger=None, **kwargs):
         "builder_asset_download_failed_season": "[{media_type}] Downloading TMDb season {asset_type} failed: {full_title} Season {season_number} (Status: {status}) Error: {error}",
         "builder_asset_upgraded_season": "[{media_type}] Upgrading TMDb season {asset_type}: {full_title} Season {season_number} ({filesize}), {reason}",
         "builder_already_up_to_date_season": "[{media_type}] No season {asset_type} changes detected: {full_title} Season {season_number} ({filesize}). Skipping...",
-        "builder_no_upgrade_needed_season": "[{media_type}] No seaon {asset_type} changes detected:{full_title} Season {season_number} ({filesize}). Skipping...",
+        "builder_no_upgrade_needed_season": "[{media_type}] No season {asset_type} changes detected: {full_title} Season {season_number} ({filesize}). Skipping...",
         "builder_no_image_for_compare_season": "[{media_type}] No image comparison: {full_title} Season {season_number}. Skipping...",
         "builder_error_image_compare_season": "[{media_type}] Failed to compare temp image checksum: {full_title} Season {season_number}: {error}",
     }
