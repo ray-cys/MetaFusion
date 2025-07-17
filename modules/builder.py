@@ -283,7 +283,13 @@ async def build_movie(
                         temp_path.unlink(missing_ok=True)
                     poster_size = asset_path.stat().st_size if asset_path.exists() else 0
                     await meta_cache_async(cache_key, tmdb_id, title, year, "movie", poster_average=best.get("vote_average", 0))
-                    if status_code == "NO_EXISTING_ASSET":
+                    if status_code == "FORCE_UPGRADE_STALE":
+                        log_builder_event(
+                            "builder_force_upgrade_stale", media_type="Movie", full_title=full_title, filesize=poster_size,
+                            last_upgraded=context.get("last_upgraded"), stale_days=config["poster_set"].get("stale_days", 30)
+                        )
+                        poster_action = "upgraded"
+                    elif status_code == "NO_EXISTING_ASSET":
                         log_builder_event(
                             "builder_downloading_asset", media_type="Movie", asset_type="poster",
                             full_title=full_title, filesize=poster_size
@@ -367,7 +373,13 @@ async def build_movie(
                         temp_path.unlink(missing_ok=True)
                     background_size = asset_path.stat().st_size if asset_path.exists() else 0
                     await meta_cache_async(cache_key, tmdb_id, title, year, "movie", bg_average=best.get("vote_average", 0))
-                    if status_code == "NO_EXISTING_ASSET":
+                    if status_code == "FORCE_UPGRADE_STALE":
+                        log_builder_event(
+                            "builder_force_upgrade_stale", media_type="Movie", full_title=full_title, filesize=background_size,
+                            last_upgraded=context.get("last_upgraded"), stale_days=config["poster_set"].get("stale_days", 30)
+                        )
+                        background_action = "upgraded"
+                    elif status_code == "NO_EXISTING_ASSET":
                         log_builder_event(
                             "builder_downloading_asset", media_type="Movie", asset_type="background",
                             full_title=full_title, filesize=background_size
@@ -796,7 +808,13 @@ async def build_tv(
                         temp_path.unlink(missing_ok=True)
                     poster_size = asset_path.stat().st_size if asset_path.exists() else 0
                     await meta_cache_async(cache_key, tmdb_id, title, year, "tv", poster_average=best.get("vote_average", 0))
-                    if status_code == "NO_EXISTING_ASSET":
+                    if status_code == "FORCE_UPGRADE_STALE":
+                        log_builder_event(
+                            "builder_force_upgrade_stale", media_type="TV Show", full_title=full_title, filesize=poster_size,
+                            last_upgraded=context.get("last_upgraded"), stale_days=config["poster_set"].get("stale_days", 30)
+                        )
+                        poster_action = "upgraded"
+                    elif status_code == "NO_EXISTING_ASSET":
                         log_builder_event(
                             "builder_downloading_asset", media_type="TV Show", asset_type="poster",
                             full_title=full_title, filesize=poster_size
@@ -880,7 +898,13 @@ async def build_tv(
                         temp_path.unlink(missing_ok=True)
                     background_size = asset_path.stat().st_size if asset_path.exists() else 0
                     await meta_cache_async(cache_key, tmdb_id, title, year, "tv", bg_average=best.get("vote_average", 0))
-                    if status_code == "NO_EXISTING_ASSET":
+                    if status_code == "FORCE_UPGRADE_STALE":
+                        log_builder_event(
+                            "builder_force_upgrade_stale", media_type="TV Show", full_title=full_title, filesize=background_size,
+                            last_upgraded=context.get("last_upgraded"), stale_days=config["poster_set"].get("stale_days", 30)
+                        )
+                        background_action = "upgraded"
+                    elif status_code == "NO_EXISTING_ASSET":
                         log_builder_event(
                             "builder_downloading_asset", media_type="TV Show", asset_type="background",
                             full_title=full_title, filesize=background_size
@@ -972,7 +996,14 @@ async def build_tv(
                         temp_path.unlink(missing_ok=True)
                     season_poster_size = asset_path.stat().st_size if asset_path.exists() else 0
                     await meta_cache_async(cache_key, tmdb_id, title, year, "tv", season_number=season_number, season_average=best.get("vote_average", 0))
-                    if status_code == "NO_EXISTING_ASSET_SEASON":
+                    if status_code == "FORCE_UPGRADE_STALE_SEASON":
+                        log_builder_event(
+                            "builder_force_upgrade_stale_season", media_type="TV Show", full_title=full_title,
+                            season_number=season_number, filesize=season_poster_size, last_upgraded=context.get("last_upgraded"),
+                            stale_days=config["season_set"].get("stale_days", 30)
+                        )
+                        season_poster_actions[season_number] = "upgraded"
+                    elif status_code == "NO_EXISTING_ASSET_SEASON":
                         log_builder_event(
                             "builder_downloading_asset_season", media_type="TV Show", asset_type="poster",
                             full_title=full_title, season_number=season_number, filesize=season_poster_size

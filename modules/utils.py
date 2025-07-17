@@ -1,4 +1,4 @@
-import asyncio, hashlib, uuid, re
+import asyncio, hashlib, uuid, re, datetime
 from pathlib import Path
 from helper.config import mode_check
 from helper.cache import load_cache
@@ -231,12 +231,21 @@ def get_best_background(
         return best
     return None
 
+def stale_image(last_upgraded, days=30):
+    if not last_upgraded:
+        return True
+    try:
+        last_dt = datetime.datetime.fromisoformat(last_upgraded)
+        return (datetime.datetime.now() - last_dt).days >= days
+    except Exception:
+        return True
+    
 def smart_asset_upgrade(
     config, asset_path, new_image_data, new_image_path=None, cache_key=None,
-    asset_type="poster"
+    asset_type="poster", stale_days=30
 ):
     from PIL import Image
-    
+
     new_width = new_image_data.get("width", 0)
     new_height = new_image_data.get("height", 0)
     new_votes = new_image_data.get("vote_average", 0)
@@ -244,16 +253,20 @@ def smart_asset_upgrade(
         vote_relaxed = config["background_set"].get("vote_relaxed", 3.5)
         vote_threshold = config["background_set"].get("vote_threshold", 5.0)
         cache_key_name = "bg_average"
+        last_upgraded_key = "background_last_upgraded"
     elif asset_type == "poster":
         vote_relaxed = config["poster_set"].get("vote_relaxed", 3.5)
         vote_threshold = config["poster_set"].get("vote_threshold", 5.0)
         cache_key_name = "poster_average"
+        last_upgraded_key = "poster_last_upgraded"
 
     cached_votes = 0
+    last_upgraded = None
     if cache_key:
         cache = load_cache()
         cached = cache.get(cache_key, {})
         cached_votes = cached.get(cache_key_name, 0)
+        last_upgraded = cached.get(last_upgraded_key)
 
     context = {
         "new_width": new_width,
@@ -263,8 +276,12 @@ def smart_asset_upgrade(
         "vote_threshold": vote_threshold,
         "vote_relaxed": vote_relaxed,
         "asset_path_exists": asset_path.exists(),
-        "new_image_path_exists": new_image_path.exists() if new_image_path else False
+        "new_image_path_exists": new_image_path.exists() if new_image_path else False,
+        "last_upgraded": last_upgraded
     }
+
+    if stale_image(last_upgraded, stale_days):
+        return True, "FORCE_UPGRADE_STALE", context
 
     if not asset_path.exists():
         return True, "NO_EXISTING_ASSET", context
@@ -309,10 +326,10 @@ def smart_asset_upgrade(
 
 def smart_season_asset_upgrade(
     config, asset_path, new_image_data, new_image_path=None, cache_key=None, 
-    season_number=None
+    season_number=None, stale_days=30
 ):
     from PIL import Image
-    
+
     new_width = new_image_data.get("width", 0)
     new_height = new_image_data.get("height", 0)
     new_votes = new_image_data.get("vote_average", 0)
@@ -322,6 +339,7 @@ def smart_season_asset_upgrade(
     cache_key_name = "season_average"
 
     cached_votes = 0
+    last_upgraded = None
     if cache_key:
         cache = load_cache()
         cached = cache.get(cache_key)
@@ -329,6 +347,7 @@ def smart_season_asset_upgrade(
             seasons = cached.get("seasons", {})
             season_entry = seasons.get(str(season_number), {})
             cached_votes = season_entry.get(cache_key_name, 0)
+            last_upgraded = season_entry.get("season_last_upgraded")
 
     context = {
         "new_width": new_width,
@@ -338,8 +357,12 @@ def smart_season_asset_upgrade(
         "vote_threshold": vote_threshold,
         "vote_relaxed": vote_relaxed,
         "asset_path_exists": asset_path.exists(),
-        "new_image_path_exists": new_image_path.exists() if new_image_path else False
+        "new_image_path_exists": new_image_path.exists() if new_image_path else False,
+        "last_upgraded": last_upgraded
     }
+
+    if stale_image(last_upgraded, stale_days):
+        return True, "FORCE_UPGRADE_STALE_SEASON", context
 
     if not asset_path.exists():
         return True, "NO_EXISTING_ASSET_SEASON", context

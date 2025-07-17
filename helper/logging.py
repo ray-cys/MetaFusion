@@ -410,6 +410,7 @@ def log_builder_event(event, logger=None, **kwargs):
         "builder_downloading_asset": "[{media_type}] Downloading TMDb {asset_type}: {full_title} ({filesize})...",
         "builder_asset_download_failed": "[{media_type}] Downloading TMDb {asset_type} failed: {full_title} (Status: {status}) Error: {error}",
         "builder_asset_upgraded": "[{media_type}] Upgrading TMDb {asset_type}: {full_title} ({filesize}), {reason}",
+        "builder_force_upgrade_stale": "[{media_type}] Force upgrade due to stale image: {full_title} ({filesize}), Last upgraded: {last_upgraded} on {stale_days}",
         "builder_already_up_to_date": "[{media_type}] No {asset_type} changes detected: {full_title} ({filesize}). Skipping...",
         "builder_no_upgrade_needed": "[{media_type}] No {asset_type} changes detected: {full_title} ({filesize}). Skipping...",
         "builder_no_image_for_compare": "[{media_type}] No image comparison: {full_title} {extra}. Skipping...",
@@ -421,6 +422,7 @@ def log_builder_event(event, logger=None, **kwargs):
         "builder_downloading_asset_season": "[{media_type}] Downloading TMDb season {asset_type}: {full_title} Season {season_number} ({filesize})...",
         "builder_asset_download_failed_season": "[{media_type}] Downloading TMDb season {asset_type} failed: {full_title} Season {season_number} (Status: {status}) Error: {error}",
         "builder_asset_upgraded_season": "[{media_type}] Upgrading TMDb season {asset_type}: {full_title} Season {season_number} ({filesize}), {reason}",
+        "builder_force_upgrade_stale_season": "[{media_type}] Force upgrade due to stale image: {full_title} Season {season_number} ({filesize}), Last upgraded: {last_upgraded} on {stale_days}",
         "builder_already_up_to_date_season": "[{media_type}] No season {asset_type} changes detected: {full_title} Season {season_number} ({filesize}). Skipping...",
         "builder_no_upgrade_needed_season": "[{media_type}] No season {asset_type} changes detected: {full_title} Season {season_number} ({filesize}). Skipping...",
         "builder_no_image_for_compare_season": "[{media_type}] No image comparison: {full_title} Season {season_number}. Skipping...",
@@ -441,6 +443,7 @@ def log_builder_event(event, logger=None, **kwargs):
         "builder_downloading_asset": "debug",
         "builder_asset_download_failed": "error",
         "builder_asset_upgraded": "info",
+        "builder_force_upgrade_stale": "info",
         "builder_already_up_to_date": "info",
         "builder_no_upgrade_needed": "info",
         "builder_no_image_for_compare": "warning",
@@ -451,6 +454,7 @@ def log_builder_event(event, logger=None, **kwargs):
         "builder_no_suitable_asset_season": "info",
         "builder_asset_download_failed_season": "error",
         "builder_asset_upgraded_season": "info",
+        "builder_force_upgrade_stale_season": "info",
         "builder_already_up_to_date_season": "info",
         "builder_no_upgrade_needed_season": "info",
         "builder_no_image_for_compare_season": "warning",
@@ -462,7 +466,6 @@ def log_builder_event(event, logger=None, **kwargs):
     if event == "builder_asset_upgraded":
         status_code = kwargs.get("status_code")
         context = kwargs.get("context", {})
-        asset_type = kwargs.get("asset_type", "")
         if status_code == "UPGRADE_VOTES":
             reason = f"TMDb vote: {context.get('new_votes')} (Cached: {context.get('cached_votes')})"
         elif status_code == "UPGRADE_STRICT":
@@ -479,7 +482,6 @@ def log_builder_event(event, logger=None, **kwargs):
     if event == "builder_asset_upgraded_season":
         status_code = kwargs.get("status_code")
         context = kwargs.get("context", {})
-        asset_type = kwargs.get("asset_type", "")
         if status_code == "UPGRADE_VOTES_SEASON":
             reason = f"TMDb vote: {context.get('new_votes')} (Cached: {context.get('cached_votes')})"
         elif status_code == "UPGRADE_ZERO_VOTE_SEASON":
@@ -516,10 +518,12 @@ def log_asset_status(
     error=None, extra=None, season_number=None
 ):
     event_map = {
+        "FORCE_UPGRADE_STALE": "builder_force_upgrade_stale",
         "ALREADY_UP_TO_DATE": "builder_already_up_to_date",
         "NO_UPGRADE_NEEDED": "builder_no_upgrade_needed",
         "NO_IMAGE_FOR_COMPARE": "builder_no_image_for_compare",
         "ERROR_IMAGE_COMPARE": "builder_error_image_compare",
+        "FORCE_UPGRADE_STALE_SEASON": "builder_force_upgrade_stale_season",
         "ALREADY_UP_TO_DATE_SEASON": "builder_already_up_to_date_season",
         "NO_UPGRADE_NEEDED_SEASON": "builder_no_upgrade_needed_season",
         "NO_IMAGE_FOR_COMPARE_SEASON": "builder_no_image_for_compare_season",
