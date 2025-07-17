@@ -47,9 +47,8 @@ async def cleanup_title_orphans(
             del cache[key]
             orphans_removed += 1
             if title and year:
-                removed_summary.setdefault((title, year), {"cache": False, "asset": [], "yaml": False})
-                removed_summary[(title, year)]["cache"] = True
-    save_cache(cache)
+                removed_summary.setdefault((title, int(year)), {"cache": False, "asset": [], "yaml": False})
+                removed_summary[(title, int(year))]["cache"] = True
 
     for (title, year, media_type), meta in preloaded_plex_metadata.items():
         if media_type in ["show", "tv"] and title and year:
@@ -65,8 +64,8 @@ async def cleanup_title_orphans(
                         del cache[cache_key]["seasons"][season_num]
                         log_cleanup_event("cleanup_removed_orphaned_season_cache", show=title, year=year, season=season_num)
                         orphans_removed += 1
-                        removed_summary.setdefault((title, year), {"cache": False, "asset": [], "yaml": False})
-                        removed_summary[(title, year)]["cache"] = True
+                        removed_summary.setdefault((title, int(year)), {"cache": False, "asset": [], "yaml": False})
+                        removed_summary[(title, int(year))]["cache"] = True
     save_cache(cache)
 
     if mode == "plex":
@@ -121,8 +120,8 @@ async def cleanup_title_orphans(
                                     del v["seasons"][season_num]
                                     log_cleanup_event("cleanup_removed_orphaned_season_yaml", show=t, year=y, season=season_num)
                                     orphans_removed += 1
-                                    removed_summary.setdefault((t, y), {"cache": False, "asset": [], "yaml": False})
-                                    removed_summary[(t, y)]["yaml"] = True
+                                    removed_summary.setdefault((t, int(y)), {"cache": False, "asset": [], "yaml": False})
+                                    removed_summary[(t, int(y))]["yaml"] = True
 
                 orphans_in_file = len(metadata_entries) - len(cleaned_metadata)
                 if orphans_in_file > 0:
@@ -136,8 +135,8 @@ async def cleanup_title_orphans(
                         for orphan_title in set(metadata_entries) - set(cleaned_metadata):
                             t, y = extract_title_year(orphan_title)
                             if t and y:
-                                removed_summary.setdefault((t, y), {"cache": False, "asset": [], "yaml": False})
-                                removed_summary[(t, y)]["yaml"] = True
+                                removed_summary.setdefault((t, int(y)), {"cache": False, "asset": [], "yaml": False})
+                                removed_summary[(t, int(y))]["yaml"] = True
                     orphans_removed += orphans_in_file
 
                 if not feature_flags.get("dry_run", False):
