@@ -3,6 +3,12 @@ from pathlib import Path
 from helper.logging import log_cleanup_event
 from helper.cache import load_cache, save_cache
 
+def safe_int(val):
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return None
+    
 async def cleanup_title_orphans(
     config, feature_flags, asset_path=None, existing_assets=None, preloaded_plex_metadata=None
 ):
@@ -46,10 +52,10 @@ async def cleanup_title_orphans(
             log_cleanup_event("cleanup_removed_cache_entry", key=key)
             del cache[key]
             orphans_removed += 1
-            if title and year:
-                removed_summary.setdefault((title, int(year)), {"cache": False, "asset": [], "yaml": False})
-                removed_summary[(title, int(year))]["cache"] = True
-
+            if title and year and safe_int(year) is not None:
+                removed_summary.setdefault((title, safe_int(year)), {"cache": False, "asset": [], "yaml": False})
+                removed_summary[(title, safe_int(year))]["cache"] = True
+    
     for (title, year, media_type), meta in preloaded_plex_metadata.items():
         if media_type in ["show", "tv"] and title and year:
             cache_key = f"tv:{title}:{year}"
@@ -64,8 +70,9 @@ async def cleanup_title_orphans(
                         del cache[cache_key]["seasons"][season_num]
                         log_cleanup_event("cleanup_removed_orphaned_season_cache", show=title, year=year, season=season_num)
                         orphans_removed += 1
-                        removed_summary.setdefault((title, int(year)), {"cache": False, "asset": [], "yaml": False})
-                        removed_summary[(title, int(year))]["cache"] = True
+                        if title and year and safe_int(year) is not None:
+                            removed_summary.setdefault((title, safe_int(year)), {"cache": False, "asset": [], "yaml": False})
+                            removed_summary[(title, safe_int(year))]["cache"] = True
     save_cache(cache)
 
     if mode == "plex":
@@ -120,8 +127,9 @@ async def cleanup_title_orphans(
                                     del v["seasons"][season_num]
                                     log_cleanup_event("cleanup_removed_orphaned_season_yaml", show=t, year=y, season=season_num)
                                     orphans_removed += 1
-                                    removed_summary.setdefault((t, int(y)), {"cache": False, "asset": [], "yaml": False})
-                                    removed_summary[(t, int(y))]["yaml"] = True
+                                    if t and y and safe_int(y) is not None:
+                                        removed_summary.setdefault((t, safe_int(y)), {"cache": False, "asset": [], "yaml": False})
+                                        removed_summary[(t, safe_int(y))]["yaml"] = True
 
                 orphans_in_file = len(metadata_entries) - len(cleaned_metadata)
                 if orphans_in_file > 0:
@@ -134,9 +142,9 @@ async def cleanup_title_orphans(
                         log_cleanup_event("cleanup_removed_orphans", orphans_in_file=orphans_in_file, filename=metadata_file.name)
                         for orphan_title in set(metadata_entries) - set(cleaned_metadata):
                             t, y = extract_title_year(orphan_title)
-                            if t and y:
-                                removed_summary.setdefault((t, int(y)), {"cache": False, "asset": [], "yaml": False})
-                                removed_summary[(t, int(y))]["yaml"] = True
+                            if t and y and safe_int(y) is not None:
+                                removed_summary.setdefault((t, safe_int(y)), {"cache": False, "asset": [], "yaml": False})
+                                removed_summary[(t, safe_int(y))]["yaml"] = True
                     orphans_removed += orphans_in_file
 
                 if not feature_flags.get("dry_run", False):
@@ -186,9 +194,9 @@ async def cleanup_title_orphans(
                         await asyncio.to_thread(path.unlink)
                         orphans_removed += 1
                         deleted_dirs.add(str(path.parent.resolve()))
-                        if title and year:
-                            removed_summary.setdefault((title, year), {"cache": False, "asset": [], "yaml": False})
-                            removed_summary[(title, year)]["asset"].append(description)
+                        if title and year and safe_int(year) is not None:
+                            removed_summary.setdefault((title, safe_int(year)), {"cache": False, "asset": [], "yaml": False})
+                            removed_summary[(title, safe_int(year))]["asset"].append(description)
                     else:
                         log_cleanup_event("cleanup_failed_remove_asset", description=description, path=path, error="File does not exist")
                 except Exception as e:
