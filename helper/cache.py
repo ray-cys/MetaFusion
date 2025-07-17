@@ -1,6 +1,5 @@
 import asyncio, json
 from datetime import datetime
-from pathlib import Path
 from helper.config import CACHE_DIR
 from helper.logging import log_cache_event
 
@@ -26,7 +25,10 @@ def save_cache(cache):
             entry.pop("season_number", None)
 
 cache_lock = asyncio.Lock()
-async def meta_cache_async(cache_key, tmdb_id, title, year, media_type, update_timestamp=True, **kwargs):
+async def meta_cache_async(
+    cache_key, tmdb_id, title, year, media_type, update_timestamp=True, asset_upgraded=False, 
+    poster_upgraded=False, background_upgraded=False, season_upgraded=None, **kwargs
+):
     async with cache_lock:
         cache = load_cache()
         entry = cache.get(cache_key, {})
@@ -34,14 +36,23 @@ async def meta_cache_async(cache_key, tmdb_id, title, year, media_type, update_t
         entry["title"] = title
         entry["year"] = year
         entry["media_type"] = media_type
+        now_iso = datetime.now().isoformat()
         if update_timestamp:
-            entry["last_updated"] = datetime.now().isoformat()
+            entry["last_updated"] = now_iso
+        if asset_upgraded:
+            entry["asset_last_upgraded"] = now_iso
+        if poster_upgraded:
+            entry["poster_last_upgraded"] = now_iso
+        if background_upgraded:
+            entry["background_last_upgraded"] = now_iso
         season_number = kwargs.pop("season_number", None)
         if season_number is not None:
             seasons = entry.setdefault("seasons", {})
             season_entry = seasons.setdefault(str(season_number), {})
             for k, v in kwargs.items():
                 season_entry[k] = v
+            if isinstance(season_upgraded, int) and season_upgraded == int(season_number):
+                season_entry["season_last_upgraded"] = now_iso
         else:
             for k, v in kwargs.items():
                 entry[k] = v
