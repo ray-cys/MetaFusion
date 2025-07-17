@@ -400,7 +400,7 @@ def log_builder_event(event, logger=None, **kwargs):
         "builder_missing_tvdb_id_and_tmdb_id": "[{media_type}] Missing TVDb and TMDb ID: {full_title}. Skipping...",
         "builder_no_tmdb_season_data": "[{media_type}] Missing TMDb data: {full_title} of Season {season_number}. Skipping...",
         "builder_no_metadata_changes": "[{media_type}] No metadata changes detected: {full_title}, ({percent}%/{incomplete_percent}%) completed. Skipping updates...",
-        "build_metadata_changed": "[{media_type}] Metadata updated: {full_title} ({percent}%), TMDb ID: {tmdb_id}, Fields updated: {changes}",
+        "build_metadata_changed": "[{media_type}] Metadata updated: {full_title} ({percent}%), TMDb ID: {tmdb_id}, {changes}",
         "builder_no_existing_metadata": "[{media_type}] No existing metadata: {full_title}. Creating new entries using TMDb ID {tmdb_id}...",
         "builder_dry_run_metadata": "[Dry Run] Would build metadata for {media_type}: {full_title}",
         "builder_metadata_cached": "[{media_type}] {full_title} cached as {cache_key}...",
