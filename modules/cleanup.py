@@ -21,10 +21,7 @@ async def cleanup_title_orphans(
         if title and year:
             if media_type in ["show", "tv"]:
                 global_valid_cache_keys.add(f"tv:{title}:{year}")
-                seasons_episodes = meta.get("seasons_episodes") or {}
-                for season_number in seasons_episodes:
-                    global_valid_cache_keys.add(f"tv:{title}:{year}:season{season_number}")
-            else:
+            elif media_type == "movie":
                 global_valid_cache_keys.add(f"movie:{title}:{year}")
             global_existing_titles.add(f"{title} ({year})")
 
@@ -52,6 +49,24 @@ async def cleanup_title_orphans(
             if title and year:
                 removed_summary.setdefault((title, year), {"cache": False, "asset": [], "yaml": False})
                 removed_summary[(title, year)]["cache"] = True
+    save_cache(cache)
+
+    for (title, year, media_type), meta in preloaded_plex_metadata.items():
+        if media_type in ["show", "tv"] and title and year:
+            cache_key = f"tv:{title}:{year}"
+            if cache_key in cache:
+                valid_seasons = set(str(s) for s in (meta.get("seasons_episodes") or {}).keys())
+                cached_seasons = set(str(s) for s in (cache[cache_key].get("seasons") or {}).keys())
+                orphaned_seasons = cached_seasons - valid_seasons
+                for season_num in orphaned_seasons:
+                    if feature_flags.get("dry_run", False):
+                        log_cleanup_event("cleanup_dry_run", description="season", path=f"{cache_key} season {season_num}")
+                    else:
+                        del cache[cache_key]["seasons"][season_num]
+                        log_cleanup_event("cleanup_removed_orphaned_season_cache", show=title, year=year, season=season_num)
+                        orphans_removed += 1
+                        removed_summary.setdefault((title, year), {"cache": False, "asset": [], "yaml": False})
+                        removed_summary[(title, year)]["cache"] = True
     save_cache(cache)
 
     if mode == "plex":
@@ -91,8 +106,25 @@ async def cleanup_title_orphans(
                 metadata_entries = metadata_content.get("metadata", {})
                 cleaned_metadata = {k: v for k, v in metadata_entries.items() if k in global_existing_titles}
 
-                orphans_in_file = len(metadata_entries) - len(cleaned_metadata)
+                for k, v in cleaned_metadata.items():
+                    t, y = extract_title_year(k)
+                    if t and y and "seasons" in v:
+                        plex_meta = preloaded_plex_metadata.get((t, int(y), "tv")) or preloaded_plex_metadata.get((t, int(y), "show"))
+                        if plex_meta:
+                            valid_seasons = set(str(s) for s in (plex_meta.get("seasons_episodes") or {}).keys())
+                            cached_seasons = set(str(s) for s in (v.get("seasons") or {}).keys())
+                            orphaned_seasons = cached_seasons - valid_seasons
+                            for season_num in orphaned_seasons:
+                                if feature_flags.get("dry_run", False):
+                                    log_cleanup_event("cleanup_dry_run", description="season", path=f"{k} season {season_num}")
+                                else:
+                                    del v["seasons"][season_num]
+                                    log_cleanup_event("cleanup_removed_orphaned_season_yaml", show=t, year=y, season=season_num)
+                                    orphans_removed += 1
+                                    removed_summary.setdefault((t, y), {"cache": False, "asset": [], "yaml": False})
+                                    removed_summary[(t, y)]["yaml"] = True
 
+                orphans_in_file = len(metadata_entries) - len(cleaned_metadata)
                 if orphans_in_file > 0:
                     if feature_flags.get("dry_run", False):
                         log_cleanup_event("cleanup_dry_run", description=cleaned_metadata, path=metadata_file)
@@ -108,6 +140,11 @@ async def cleanup_title_orphans(
                                 removed_summary[(t, y)]["yaml"] = True
                     orphans_removed += orphans_in_file
 
+                if not feature_flags.get("dry_run", False):
+                    metadata_content["metadata"] = cleaned_metadata
+                    with open(metadata_file, "w", encoding="utf-8") as f:
+                        yaml.dump(metadata_content, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+                        
             except Exception as e:
                 log_cleanup_event("cleanup_failed_remove_metadata", filename=metadata_file, error=str(e))
 
@@ -135,7 +172,6 @@ async def cleanup_title_orphans(
             except Exception:
                 pass
             resolved_path = str(path.resolve())
-            parent_dir = path.parent.name
             if strict:
                 if path.parent.name in valid_asset_dirs:
                     return

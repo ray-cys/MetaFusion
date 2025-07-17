@@ -3,7 +3,7 @@ from pathlib import Path
 from helper.cache import save_cache, load_cache
 from helper.config import mode_check 
 from helper.logging import log_processing_event, log_library_summary
-from helper.plex import get_plex_metadata
+from helper.plex import get_plex_metadata, _plex_cache
 from modules.builder import build_movie, build_tv
 
 async def process_item(
@@ -56,6 +56,7 @@ async def process_library(
 ):
     global plex_metadata_dict
     plex_metadata_dict.clear()
+    _plex_cache.clear()
     
     library_name = library_section.title
     if ignored_fields is None:
