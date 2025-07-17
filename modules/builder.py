@@ -286,7 +286,7 @@ async def build_movie(
                     if status_code == "FORCE_UPGRADE_STALE":
                         log_builder_event(
                             "builder_force_upgrade_stale", media_type="Movie", full_title=full_title, filesize=poster_size,
-                            last_upgraded=context.get("last_upgraded"), stale_days=config["poster_set"].get("stale_days", 30)
+                            last_upgraded=context.get("last_upgraded"), stale_days="30")
                         )
                         poster_action = "upgraded"
                     elif status_code == "NO_EXISTING_ASSET":
@@ -376,7 +376,7 @@ async def build_movie(
                     if status_code == "FORCE_UPGRADE_STALE":
                         log_builder_event(
                             "builder_force_upgrade_stale", media_type="Movie", full_title=full_title, filesize=background_size,
-                            last_upgraded=context.get("last_upgraded"), stale_days=config["poster_set"].get("stale_days", 30)
+                            last_upgraded=context.get("last_upgraded"), stale_days="30")
                         )
                         background_action = "upgraded"
                     elif status_code == "NO_EXISTING_ASSET":
@@ -811,7 +811,7 @@ async def build_tv(
                     if status_code == "FORCE_UPGRADE_STALE":
                         log_builder_event(
                             "builder_force_upgrade_stale", media_type="TV Show", full_title=full_title, filesize=poster_size,
-                            last_upgraded=context.get("last_upgraded"), stale_days=config["poster_set"].get("stale_days", 30)
+                            last_upgraded=context.get("last_upgraded"), stale_days="30")
                         )
                         poster_action = "upgraded"
                     elif status_code == "NO_EXISTING_ASSET":
@@ -901,7 +901,7 @@ async def build_tv(
                     if status_code == "FORCE_UPGRADE_STALE":
                         log_builder_event(
                             "builder_force_upgrade_stale", media_type="TV Show", full_title=full_title, filesize=background_size,
-                            last_upgraded=context.get("last_upgraded"), stale_days=config["poster_set"].get("stale_days", 30)
+                            last_upgraded=context.get("last_upgraded"), stale_days="30")
                         )
                         background_action = "upgraded"
                     elif status_code == "NO_EXISTING_ASSET":
@@ -1000,7 +1000,7 @@ async def build_tv(
                         log_builder_event(
                             "builder_force_upgrade_stale_season", media_type="TV Show", full_title=full_title,
                             season_number=season_number, filesize=season_poster_size, last_upgraded=context.get("last_upgraded"),
-                            stale_days=config["season_set"].get("stale_days", 30)
+                            stale_days="30")
                         )
                         season_poster_actions[season_number] = "upgraded"
                     elif status_code == "NO_EXISTING_ASSET_SEASON":
