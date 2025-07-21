@@ -1,4 +1,4 @@
-import os, sys, platform, psutil, logging, textwrap, requests
+import os, sys, platform, psutil, logging, textwrap, requests, datetime
 from pathlib import Path
 
 BASE_CONFIG_DIR = Path(os.environ.get("CONFIG_DIR", "/config"))
@@ -39,7 +39,7 @@ def get_setup_logging(config):
         logger.handlers.clear()
     formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
 
-    file_handler = logging.FileHandler(log_file, mode='w', encoding="utf-8")
+    file_handler = logging.FileHandler(log_file, mode='a', encoding="utf-8")
     file_handler.setFormatter(formatter)
     file_handler.setLevel(log_level)
 
@@ -720,8 +720,8 @@ def log_library_summary(
         logger.info(line)
 
 def log_final_summary(
-    logger, elapsed_time, library_item_counts, metadata_summaries, library_filesize,
-    orphans_removed, cleanup_title_orphans, selected_libraries, libraries, config, feature_flags=None, library_summary=None
+    logger, elapsed_time, metadata_summaries, library_filesize, orphans_removed, cleanup_title_orphans, 
+    selected_libraries, libraries, config, feature_flags=None
 ):
     box_width = 80
     def box_line(text, width=box_width):
@@ -738,7 +738,8 @@ def log_final_summary(
         border
     ]
     minutes, seconds = divmod(int(elapsed_time), 60)
-    lines.extend(box_line(f"Executed in {minutes} mins {seconds} secs.", box_width))
+    run_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    lines.extend(box_line(f"Executed on {run_date} in {minutes} mins {seconds} secs.", box_width))
     processed_libraries = [lib["title"] for lib in libraries if lib["title"] in selected_libraries]
     skipped_libraries = [lib["title"] for lib in libraries if lib["title"] not in selected_libraries]
     lines.extend(box_line(
