@@ -1012,7 +1012,7 @@ async def build_tv(
                             stale_days=stale_days)
                         await meta_cache_async(
                             cache_key, tmdb_id, title, year, "tv", season_number=season_number, season_average=best.get("vote_average", 0),
-                            season_upgraded=season_number)
+                            season_upgraded=True)
                         season_poster_actions[season_number] = "upgraded"
                     elif status_code == "NO_EXISTING_ASSET_SEASON":
                         log_builder_event(

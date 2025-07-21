@@ -99,9 +99,9 @@ async def metafusion_main():
         end_time = datetime.now()
         elapsed_time = (end_time - start_time).total_seconds()
         log_final_summary(
-            logger, elapsed_time, library_item_counts, metadata_summaries, library_filesize,
+            logger, elapsed_time, metadata_summaries, library_filesize,
             orphans_removed, cleanup_title_orphans, selected_libraries, all_libraries, config,
-            feature_flags=feature_flags
+            feature_flags
         )
     _plex_cache.clear()
     plex_metadata_dict.clear()
