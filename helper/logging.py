@@ -1,4 +1,5 @@
 import os, sys, platform, psutil, logging, textwrap, requests, datetime
+from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
 BASE_CONFIG_DIR = Path(os.environ.get("CONFIG_DIR", "/config"))
@@ -10,24 +11,9 @@ MIN_CPU_CORES = 4
 MIN_RAM_GB = 4
 
 def get_setup_logging(config):
-    script_name = Path(sys.argv[0]).stem
     log_file = LOG_FILE
     log_dir = log_file.parent
     log_dir.mkdir(parents=True, exist_ok=True)
-
-    if log_file.exists() and log_file.stat().st_size > 0:
-        for i in range(5, 0, -1):
-            src = log_dir / f"{script_name}{'' if i == 1 else i-1}.log"
-            dst = log_dir / f"{script_name}{i}.log"
-            if src.exists():
-                if i == 5:
-                    src.unlink()
-                else:
-                    src.rename(dst)
-        try:
-            log_file.rename(log_dir / f"{script_name}1.log")
-        except FileNotFoundError:
-            pass
 
     log_level_str = config["settings"].get("log_level", "INFO").upper()
     log_level = getattr(logging, log_level_str, logging.INFO)
@@ -39,7 +25,10 @@ def get_setup_logging(config):
         logger.handlers.clear()
     formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
 
-    file_handler = logging.FileHandler(log_file, mode='a', encoding="utf-8")
+    file_handler = TimedRotatingFileHandler(
+        log_file, when="midnight", interval=1, backupCount=7, encoding="utf-8",
+        suffix="%Y-%m-%d.log"
+    )
     file_handler.setFormatter(formatter)
     file_handler.setLevel(log_level)
 
