@@ -27,7 +27,7 @@ def get_setup_logging(config):
 
     file_handler = TimedRotatingFileHandler(
         log_file, when="midnight", interval=1, backupCount=7, encoding="utf-8",
-        suffix="%Y-%m-%d.log"
+        suffix="%Y-%m-%d"
     )
     file_handler.setFormatter(formatter)
     file_handler.setLevel(log_level)
