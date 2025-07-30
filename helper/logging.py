@@ -26,9 +26,10 @@ def get_setup_logging(config):
     formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
 
     file_handler = TimedRotatingFileHandler(
-        log_file, when="midnight", interval=1, backupCount=7, encoding="utf-8",
-        suffix="%Y-%m-%d"
+        log_file, when="midnight", interval=1, backupCount=7, encoding="utf-8"
     )
+    file_handler.suffix = "%Y-%m-%d.log"
+
     file_handler.setFormatter(formatter)
     file_handler.setLevel(log_level)
 
